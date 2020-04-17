@@ -1,3 +1,9 @@
+""" Title: Common code for handling free-floating moving bases
+Author: Kris Hauser
+Version: v1.0
+Date: 8/10/2016
+Availability: https://github.com/krishauser/IROS2016ManipulationChallenge/blob/master/moving_base_control.py"""
+
 """Common code for handling free-floating moving bases"""
 
 from klampt.math import so3
