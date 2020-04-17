@@ -1,0 +1,13 @@
+klampt==0.8.1
+PyOpenGL
+PyQt5
+
+pyDOE==0.3.8
+cvxpy==1.0.25
+torch==1.4.0
+
+numpy
+scikit-learn==0.22.1
+scipy==1.4.1
+
+matplotlib==3.1.2
