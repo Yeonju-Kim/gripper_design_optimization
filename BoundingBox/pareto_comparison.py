@@ -65,16 +65,6 @@ class Observations:
         else:
             return -1
 
-    def reduction_CI_test(self, idx):
-        '''
-        reduction of Confidence Interval of Bounding Boxes by more experiments
-        '''
-        parent_idx = idx
-        err_magnitude = self.upper_bounds[parent_idx] - self.lower_bounds[parent_idx]
-        self.lower_bounds[parent_idx] += np.random.uniform(-1, 1) * 3
-        self.upper_bounds[parent_idx] = err_magnitude * 0.8 + self.lower_bounds[parent_idx]
-        self.num_exps[parent_idx] *= 2
-
     def is_overlap(self):
         num_candidates = self.lower_bounds.shape[0]
         num_functions = self.lower_bounds.shape[1]
