@@ -1,7 +1,8 @@
-from klampt.math import so3
 from klampt import *
 import numpy as np
+from klampt.math import so3
 import math
+
 
 class create_new_design():
     def __init__(self, robot):
