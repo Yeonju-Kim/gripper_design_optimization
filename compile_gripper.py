@@ -1,3 +1,4 @@
+from compile_objects import auto_download
 import mujoco_py as mjc
 import lxml.etree as ET
 import glob,ntpath,os
@@ -297,23 +298,19 @@ class Gripper:
         return root
         
 if __name__=='__main__':
-    gripper=Gripper()
-    #gripper.get_finger(finger_length=0.5,finger_curvature=7)[0].show()
-    #gripper.get_base()[0].show()
-    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
-    #link.get_mesh([0.0 for i in range(6)]+[0.8,-0.9]).show()
+    auto_download()
     
+    gripper=Gripper()
+    path='data/gripper'
     root=ET.Element('mujoco')
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
-    path='data/gripper'
+    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
     link.compile_gripper(body,asset,path)
-    print(ET.tostring(root,pretty_print=True).decode())
     
     open(path+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
     model=mjc.load_model_from_path(path+'/gripper.xml')
     sim=mjc.MjSim(model)
     viewer=mjc.MjViewer(sim)
     while True:
-        #sim.step()
         viewer.render()
