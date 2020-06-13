@@ -35,8 +35,9 @@ class Controller:
         for c in link.children:
             self.get_link_ids(c)
     
-    def reset_approach_dir(self,initial_pos,axial_rotation):
+    def reset(self,id,initial_pos,axial_rotation):
         #we assume the gripper is always approaching from initial_pos to [0,0,0]
+        self.world.test_object(id)
         state=self.sim.get_state()
         
         v0=np.array([0,0,1],dtype=np.float64)
@@ -59,6 +60,26 @@ class Controller:
         self.shaked=False
         self.shake_count=0
         self.elapsed=0.0
+    
+    def record_contacts(self):
+        #get object pos
+        state=self.sim.get_state()
+        addr=self.world.addrs[self.world.target_object_id]
+        objpos=[state.qpos[addr[0]],state.qpos[addr[1]],state.qpos[addr[2]]]
+        #get contacts
+        self.contact_poses=[]
+        self.contact_normals=[]
+        for ic in range(self.sim.data.ncon):
+            c=self.sim.data.contact[ic]
+            if c.geom1 in self.link_ids and c.geom2 not in self.link_ids:
+                if c.geom2==self.world.target_geom_id:
+                    self.contact_poses.append([cp-op for cp,op in zip(c.pos,objpos)])
+                    self.contact_normals.append(c.frame[0:3].tolist())
+            elif c.geom1 not in self.link_ids and c.geom2 in self.link_ids:
+                if c.geom1==self.world.target_geom_id:
+                    self.contact_poses.append([cp-op for cp,op in zip(c.pos,objpos)])
+                    #to compute Q_* metric, we assume normals are point inward i.e. n*p<0
+                    self.contact_normals.append([-n for n in c.frame[0:3].tolist()])
     
     def contact_state(self):
         floor_contact=False
@@ -111,6 +132,7 @@ class Controller:
         maxVel=max([abs(q) for q in self.link.fetch_q(state.qvel)])
         if maxVel<self.thres_vel:  #we assume closed when the velocity is small enough
             self.x_closed=self.link.fetch_q(state.qpos)
+            self.record_contacts()  #this will be used to compute Q_* metric later
             self.closed=True
         return True
         
@@ -209,11 +231,13 @@ if __name__=='__main__':
     #create world    
     world=World()
     world.compile_simulator(object_file_name='data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off',link=link)
-    world.test_object(0)
     viewer=mjc.MjViewer(world.sim)
     
     #create controller
     controller=Controller(world)
-    controller.reset_approach_dir([0.1,0.,5.],-0.1)
-    while not controller.step():
-        viewer.render()
+    id=0
+    while True:
+        controller.reset(id,[0.1,0.,5.],-0.1)
+        while not controller.step():
+            viewer.render()
+        id=(id+1)%len(controller.world.names)

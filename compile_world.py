@@ -206,6 +206,8 @@ class World:
             state.qvel[addr[3+Gripper.Z]]=0
             off+=1
         self.sim.set_state(state)
+        self.target_geom_id=self.sim.model.geom_names.index(self.names[id])
+        self.target_object_id=id
 
 if __name__=='__main__':
     auto_download()
