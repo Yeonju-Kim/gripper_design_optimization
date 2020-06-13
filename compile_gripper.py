@@ -25,6 +25,18 @@ def as_mesh(scene_or_mesh):
         mesh = scene_or_mesh
     return mesh
 
+def set_simulator_option(root,dt=0.001,withparent=False):
+    #<option timestep='0.002' iterations="50" solver="PGS">
+    #    <flag energy="enable"/>
+    #</option>
+    option=ET.SubElement(root,'option')
+    option.set('timestep',str(dt))
+    option.set('iterations','50')
+    option.set('solver','PGS')
+    flag=ET.SubElement(option,'flag')
+    flag.set('filterparent','disable' if withparent else 'enable')
+    flag.set('energy','enable')
+
 class Link:
     def __init__(self,geom,name,nameMesh,trans=None,parent=None,affine=None):
         self.geom=geom
@@ -111,7 +123,7 @@ class Link:
         q=tm.transformations.quaternion_from_matrix(self.trans[0:3,0:3])
         return str(q[0])+' '+str(q[1])+' '+str(q[2])+' '+str(q[3])
 
-    def compile_gripper(self,body,asset,path,damping=10.0):
+    def compile_gripper(self,body,asset,actuator,path,damping=1000.0,gear=1):
         b=ET.SubElement(body,'body')
         b.set('pos',self.get_pos())
         b.set('quat',self.get_quat())
@@ -122,6 +134,7 @@ class Link:
         geom.set('name',self.name)
         geom.set('type','mesh')
         #joint
+        self.ctrl_names=[]
         if self.parent is None:
             for p in range(2):
                 for i in range(3):
@@ -130,16 +143,31 @@ class Link:
                     for d in range(3):
                         axis+='1' if d==i else '0'
                         if d<2:axis+=' '
+                    jointName=self.name+str('t' if p==0 else 'r')+str(i)
                     joint.set('axis',axis)
                     joint.set('limited','false')
+                    joint.set('name',jointName)
                     joint.set('type','slide' if p==0 else 'hinge')
                     joint.set('damping',str(damping))
+                    if actuator is not None:
+                        motor=ET.SubElement(actuator,'motor')
+                        motor.set('gear',str(gear))
+                        motor.set('name',jointName)
+                        motor.set('joint',jointName)
+                        self.ctrl_names.append(jointName)
         else:
             joint=ET.SubElement(b,'joint')
             joint.set('axis','0 1 0')
             joint.set('range',str(-math.pi/2)+' '+str(math.pi/2))
+            joint.set('name',self.name)
             joint.set('type','hinge')
             joint.set('damping',str(damping))
+            if actuator is not None:
+                motor=ET.SubElement(actuator,'motor')
+                motor.set('gear',str(gear))
+                motor.set('name',self.name)
+                motor.set('joint',self.name)
+                self.ctrl_names.append(self.name)
         #asset
         if not os.path.exists(path):
             os.mkdir(path)
@@ -162,12 +190,42 @@ class Link:
             mesh.set('name',self.nameMesh)
         #children
         for c in self.children:
-            c.compile_gripper(b,asset,path)
+            c.compile_gripper(b,asset,actuator=actuator,path=path,gear=gear)
 
     def finger_id(self):
         if self.parent.parent is None:
             return self.parent.children.index(self)
         else: return self.parent.finger_id()
+    
+    def set_PD_target(self,qpos,qvel):
+        self.PTarget=[]
+        self.DTarget=[]
+        for jid in self.joint_ids:
+            self.PTarget.append(qpos[jid])
+            self.DTarget.append(qvel[jid])
+        for c in self.children:
+            c.set_PD_target(qpos,qvel)
+        
+    def set_PD_target(self,x):
+        self.PTarget=x[self.id:self.id+self.num_DOF()]
+        self.DTarget=[0 for P in self.PTarget]
+        for c in self.children:
+            c.set_PD_target(x)
+        
+    def define_ctrl(self,sim,qpos,qvel,pcoef=15000.0,dcoef=100.0):
+        for cid,jid,PT,DT in zip(self.ctrl_ids,self.joint_ids,self.PTarget,self.DTarget):
+            sim.data.ctrl[cid]=(PT-qpos[jid])*pcoef+(DT-qvel[jid])*dcoef
+        for c in self.children:
+            c.define_ctrl(sim,qpos,qvel,pcoef,dcoef)
+        
+    def get_ctrl_address(self,sim):
+        self.ctrl_ids=[]
+        self.joint_ids=[]
+        for name in self.ctrl_names:
+            self.ctrl_ids.append(sim.model.actuator_names.index(name))
+            self.joint_ids.append(sim.model.get_joint_qpos_addr(name))
+        for c in self.children:
+            c.get_ctrl_address(sim)
     
 class Gripper:
     X,Y,Z=(0,1,2)
@@ -303,14 +361,23 @@ if __name__=='__main__':
     gripper=Gripper()
     path='data/gripper'
     root=ET.Element('mujoco')
+    set_simulator_option(root)
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
+    actuator=ET.SubElement(root,'actuator')
     link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
-    link.compile_gripper(body,asset,path)
+    link.compile_gripper(body,asset,actuator,path)
     
     open(path+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
     model=mjc.load_model_from_path(path+'/gripper.xml')
     sim=mjc.MjSim(model)
+    link.get_ctrl_address(sim)
     viewer=mjc.MjViewer(sim)
+    
+    state=sim.get_state()
+    link.set_PD_target([0.0 for i in range(6)]+[1.9,0.9])
     while True:
+        state=sim.get_state()
+        link.define_ctrl(sim,state.qpos,state.qvel)
+        sim.step()
         viewer.render()

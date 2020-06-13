@@ -76,10 +76,11 @@ class World:
     def __init__(self):
         pass
         
-    def compile(self,object_file_name,link,path,damping):
+    def compile(self,object_file_name,link,path,damping,damping_gripper):
         root=ET.Element('mujoco')
         asset=ET.SubElement(root,'asset')
         body=ET.SubElement(root,'worldbody')
+        actuator=ET.SubElement(root,'actuator')
         create_fog(root)
         create_skybox(asset)
         create_floor(asset,body)
@@ -90,7 +91,7 @@ class World:
         
         #link
         if link is not None:
-            link.compile_gripper(body,asset,path,damping)
+            link.compile_gripper(body,asset,actuator,path,damping_gripper)
             self.link=link
         else: self.link=None
         return root
@@ -150,8 +151,8 @@ class World:
             self.names=None 
             self.fullnames=None
 
-    def compile_simulator(self,object_file_name=None,link=None,path='data/gripper',damping=10):
-        root=self.compile(object_file_name=object_file_name,link=link,path=path,damping=damping)
+    def compile_simulator(self,object_file_name=None,link=None,path='data/gripper',damping=10,damping_gripper=1000):
+        root=self.compile(object_file_name=object_file_name,link=link,path=path,damping=damping,damping_gripper=damping_gripper)
         open(path+'/world.xml','w').write(ET.tostring(root,pretty_print=True).decode())
         model=mjc.load_model_from_path(path+'/world.xml')
         self.sim=mjc.MjSim(model)
@@ -187,12 +188,20 @@ class World:
         off=1
         state=self.sim.get_state()
         for addr,COM in zip(self.addrs,self.COMs):
+            #pos
             state.qpos[addr[Gripper.X]]=0 if off-1==id else sep_dist[0]*off
             state.qpos[addr[Gripper.Y]]=0 if off-1==id else sep_dist[1]*off
             state.qpos[addr[Gripper.Z]]=-COM
             state.qpos[addr[3+Gripper.X]]=0
             state.qpos[addr[3+Gripper.Y]]=0
             state.qpos[addr[3+Gripper.Z]]=0
+            #vel
+            state.qvel[addr[Gripper.X]]=0
+            state.qvel[addr[Gripper.Y]]=0
+            state.qvel[addr[Gripper.Z]]=0
+            state.qvel[addr[3+Gripper.X]]=0
+            state.qvel[addr[3+Gripper.Y]]=0
+            state.qvel[addr[3+Gripper.Z]]=0
             off+=1
         self.sim.set_state(state)
 
