@@ -216,7 +216,7 @@ class Link:
         for c in self.children:
             c.set_PD_target(x,vx=vx,state=state)
         
-    def define_ctrl(self,sim,qpos,qvel,pcoef=15000.0,dcoef=100.0):
+    def define_ctrl(self,sim,qpos,qvel,pcoef=15000.0,dcoef=1000.0):
         for cid,jid,PT,DT in zip(self.ctrl_ids,self.joint_ids,self.PTarget,self.DTarget):
             sim.data.ctrl[cid]=(PT-qpos[jid])*pcoef+(DT-qvel[jid])*dcoef
         for c in self.children:
@@ -230,6 +230,12 @@ class Link:
             self.joint_ids.append(sim.model.get_joint_qpos_addr(name))
         for c in self.children:
             c.get_ctrl_address(sim)
+            
+    def fetch_q(self,qvec):
+        ret=[qvec[jid] for jid in self.joint_ids]
+        for c in self.children:
+            ret+=c.fetch_q(qvec)
+        return ret
     
 class Gripper:
     X,Y,Z=(0,1,2)

@@ -184,6 +184,7 @@ class World:
             self.addrs=[]
 
     def test_object(self,id,sep_dist=[5.,0.]):
+        self.sim.reset()
         if self.names is None:
             return
         off=1
