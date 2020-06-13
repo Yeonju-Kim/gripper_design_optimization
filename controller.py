@@ -58,6 +58,7 @@ class Controller:
         self.lifted=False
         self.shaked=False
         self.shake_count=0
+        self.elapsed=0.0
     
     def contact_state(self):
         floor_contact=False
@@ -96,7 +97,6 @@ class Controller:
         return True
     
     def close(self):
-        dt=self.sim.model.opt.timestep
         state=self.sim.get_state()
         qpos=self.link.fetch_q(state.qpos)
         x=self.x_approached[0:6]+[qpos[6]-self.approach_vel,qpos[7]-self.approach_vel]
@@ -106,6 +106,7 @@ class Controller:
     
         #return succeed or failed (actually close will always succeed)
         self.sim.step()
+        self.elapsed+=1
         state=self.sim.get_state()
         maxVel=max([abs(q) for q in self.link.fetch_q(state.qvel)])
         if maxVel<self.thres_vel:  #we assume closed when the velocity is small enough
@@ -124,6 +125,7 @@ class Controller:
         self.link.define_ctrl(self.sim,state.qpos,state.qvel)
         
         self.sim.step()
+        self.elapsed+=1
         fc,oc=self.contact_state()
         if not oc:  #if no object contact, immediately return false
             return False
@@ -158,6 +160,7 @@ class Controller:
         self.link.define_ctrl(self.sim,state.qpos,state.qvel)
     
         self.sim.step()
+        self.elapsed+=1
         fc,oc=self.contact_state()
         if not oc:  #if no object contact, immediately return false
             return False
