@@ -25,7 +25,7 @@ def as_mesh(scene_or_mesh):
         mesh = scene_or_mesh
     return mesh
 
-def set_simulator_option(root,dt=0.001,withparent=False):
+def set_simulator_option(root,dt=0.001,withparent=True):
     #<option timestep='0.002' iterations="50" solver="PGS">
     #    <flag energy="enable"/>
     #</option>
@@ -196,21 +196,25 @@ class Link:
         if self.parent.parent is None:
             return self.parent.children.index(self)
         else: return self.parent.finger_id()
-    
-    def set_PD_target(self,qpos,qvel):
-        self.PTarget=[]
-        self.DTarget=[]
-        for jid in self.joint_ids:
-            self.PTarget.append(qpos[jid])
-            self.DTarget.append(qvel[jid])
-        for c in self.children:
-            c.set_PD_target(qpos,qvel)
-        
-    def set_PD_target(self,x):
+     
+    def set_PD_target(self,x,vx=None,state=None):
+        #set PD target to the provided DOF
+        #if state!=None, then MuJoCo's state is cleared to match PD target (reset simulator)
         self.PTarget=x[self.id:self.id+self.num_DOF()]
-        self.DTarget=[0 for P in self.PTarget]
+        self.DTarget=[0 for P in self.PTarget] if vx is None else vx[self.id:self.id+self.num_DOF()]
+        if state is not None:
+            if self.parent is None:
+                #this is base, set it to initial_pos and approach dir
+                for off,jid in enumerate(self.joint_ids):
+                    state.qpos[jid]=x[off+self.id]
+            else:
+                #this is non-base, set it to 0
+                for off,jid in enumerate(self.joint_ids):
+                    state.qpos[jid]=0.0
+            for jid in self.joint_ids:
+                state.qvel[jid]=0.0
         for c in self.children:
-            c.set_PD_target(x)
+            c.set_PD_target(x,vx=vx,state=state)
         
     def define_ctrl(self,sim,qpos,qvel,pcoef=15000.0,dcoef=100.0):
         for cid,jid,PT,DT in zip(self.ctrl_ids,self.joint_ids,self.PTarget,self.DTarget):
@@ -375,7 +379,7 @@ if __name__=='__main__':
     viewer=mjc.MjViewer(sim)
     
     state=sim.get_state()
-    link.set_PD_target([0.0 for i in range(6)]+[1.9,0.9])
+    link.set_PD_target([0.0 for i in range(6)]+[1.9,0.0])
     while True:
         state=sim.get_state()
         link.define_ctrl(sim,state.qpos,state.qvel)

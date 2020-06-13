@@ -1,5 +1,5 @@
 from compile_objects import auto_download,compile_objects,get_COM
-from compile_gripper import Link,Gripper
+from compile_gripper import Link,Gripper,set_simulator_option
 import mujoco_py as mjc
 import lxml.etree as ET
 
@@ -76,8 +76,9 @@ class World:
     def __init__(self):
         pass
         
-    def compile(self,object_file_name,link,path,damping,damping_gripper):
+    def compile(self,object_file_name,link,path,damping,damping_gripper,scale_obj):
         root=ET.Element('mujoco')
+        set_simulator_option(root)
         asset=ET.SubElement(root,'asset')
         body=ET.SubElement(root,'worldbody')
         actuator=ET.SubElement(root,'actuator')
@@ -87,7 +88,7 @@ class World:
         create_light(body)
         
         #object
-        self.compile_objects(object_file_name,asset,body,damping)
+        self.compile_objects(object_file_name,asset,body,damping,scale_obj)
         
         #link
         if link is not None:
@@ -96,7 +97,7 @@ class World:
         else: self.link=None
         return root
 
-    def compile_objects(self,object_file_name,asset,body,damping):
+    def compile_objects(self,object_file_name,asset,body,damping,scale_obj):
         #<texture name="texgeom" type="cube" builtin="flat" mark="cross" width="127" height="127" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" markrgb="1 1 1" random="0.01"/>  
         #<material name='geom' texture="texgeom" texuniform="true"/>
         #texture
@@ -118,7 +119,7 @@ class World:
         material.set('texuniform','true')
         #object
         if object_file_name is not None:
-            self.names,self.fullnames=compile_objects(asset,object_file_name)
+            self.names,self.fullnames=compile_objects(asset,object_file_name,scale_obj)
             for name,fullname in zip(self.names,self.fullnames):
                 #<body name='obj' pos='0 -.08 1'>
                     #<geom name='obj' type='capsule' size='.05 .075'/>
@@ -151,8 +152,8 @@ class World:
             self.names=None 
             self.fullnames=None
 
-    def compile_simulator(self,object_file_name=None,link=None,path='data/gripper',damping=10,damping_gripper=1000):
-        root=self.compile(object_file_name=object_file_name,link=link,path=path,damping=damping,damping_gripper=damping_gripper)
+    def compile_simulator(self,object_file_name=None,link=None,path='data/gripper',*,damping=10,damping_gripper=1000,scale_obj=2):
+        root=self.compile(object_file_name=object_file_name,link=link,path=path,damping=damping,damping_gripper=damping_gripper,scale_obj=scale_obj)
         open(path+'/world.xml','w').write(ET.tostring(root,pretty_print=True).decode())
         model=mjc.load_model_from_path(path+'/world.xml')
         self.sim=mjc.MjSim(model)

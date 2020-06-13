@@ -33,7 +33,7 @@ def get_COM(obj):
     mesh=tm.exchange.load.load(obj)
     return mesh.center_mass,mesh.bounds
 
-def compile_objects(asset,object_file_name,force=True):
+def compile_objects(asset,object_file_name,scale_obj=None,force=True):
     names = []
     fullnames = []
     object_list = glob.glob(object_file_name)
@@ -45,6 +45,8 @@ def compile_objects(asset,object_file_name,force=True):
         mesh=ET.SubElement(asset,'mesh')
         mesh.set('file',fullnames[-1])
         mesh.set('name',names[-1])
+        if scale_obj is not None:
+            mesh.set('scale',str(scale_obj)+' '+str(scale_obj)+' '+str(scale_obj))
     return names,fullnames
 
 if __name__=='__main__':
