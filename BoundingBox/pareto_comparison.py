@@ -226,4 +226,4 @@ class Observations:
             mean_point = sampled_point[0]
             plt.scatter(mean_point[0], mean_point[1], c ='r', s = 1)
             plt.scatter(sampled_point[1][0], sampled_point[1][1], c= 'b', s= 0.6)
-        plt.show()
+        # plt.show()

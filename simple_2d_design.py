@@ -7,7 +7,7 @@ import pdb
 from pyDOE import *
 from scipy.stats import uniform
 import matplotlib.pyplot as plt
-
+start_time = time.time()
 
 class optimize_design:
     def __init__(self, init_with_lhs, num_init_samples,  obj_space_lim, world_file_name, object_file_name, iter_per_obj, num_objectives, exps_th, gamma, num_designs, bounds, show_step):
@@ -323,8 +323,10 @@ class optimize_design:
                     self.gp[obj].alpha = noise[:, obj]
                 self.gp[obj].fit(self.train_features, self.train_labels[:, obj])
             x_prev = x_max
-            pareto_set, _ = self.is_pareto_simple_max()
-            x_max = self.acquisition_MC_random(pareto_set)
+            if idx < self.num_designs-1:
+                pareto_set, _ = self.is_pareto_simple_max()
+                x_max = self.acquisition_MC_random(pareto_set)
+                print("design parameters: ", len(self.design_parameter))
 
             ## Draw plot for acquisition function
             # fontsize_title = 10
@@ -378,15 +380,15 @@ class optimize_design:
 
 
 if __name__ == '__main__':
-    opt_design = optimize_design(init_with_lhs = True, num_init_samples =10,
+    opt_design = optimize_design(init_with_lhs = False, num_init_samples =10,
                                  world_file_name='Simulation/box_robot_floating.xml',
-                                 object_file_name='../ObjectNet3D/CAD/off/cup/[0-9][3-4].off',
-                                 iter_per_obj=10, num_objectives=2,
-                                 exps_th=10, gamma=1.96, num_designs=10,
+                                 object_file_name='../ObjectNet3D/CAD/off/cup/[0-9][0-9].off',
+                                 iter_per_obj=20, num_objectives=2,
+                                 exps_th=0, gamma=1.96, num_designs=30,
                                  bounds=np.asarray([[-1.0, 1], [0, 1.]]),
                                  obj_space_lim = [[-7., 0], [0, 1]],
                                  show_step=False)
     opt_design.run()
     opt_design.get_result()
-    pdb.set_trace()
+    print("---- %s seconds --- " % (time.time() - start_time))
     plt.show()
