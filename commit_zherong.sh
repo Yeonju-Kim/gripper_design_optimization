@@ -3,7 +3,9 @@ rm -rdf *.user
 rm -rdf *.pyc
 rm -rdf __pycache__
 cd GraspMetric
-sudo mv build dist pyGraspMetric.egg-info ../../
+sudo mv build ../../
+sudo mv dist ../../
+sudo mv pyGraspMetric.egg-info ../../
 cd ..
 sudo mv ../build ../dist ../pyDiffNE.egg-info ./GraspMetric
 git checkout zherong
