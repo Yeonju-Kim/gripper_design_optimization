@@ -2,12 +2,13 @@ from compile_objects import auto_download
 from compile_gripper import Gripper
 from compile_world import World
 from controller import Controller
+import multiprocessing
 from metric import *
 import numpy as np
 import math,copy
 
 class Domain:
-    NUMBER_THREAD=4
+    NUMBER_THREAD=max(1,multiprocessing.cpu_count()//2)
     PARALLEL_EVAL=True
     #design space can be policy-related or gripper-related:
     #policy-related variables are: theta,phi,beta
@@ -17,6 +18,7 @@ class Domain:
     #object-dependent metrics will be first maximized for each object, then taken mean over all objects
     #object-independent metrics will be computed for each gripper
     def __init__(self,*,design_space,metrics,object_file_name,policy_space=[10,5,10,3.]):
+        print('Initializing Domain, multi-threaded evaluation using %d threads!'%Domain.NUMBER_THREAD)
         self.gripper=Gripper()
         self.object_file_name=object_file_name
         
