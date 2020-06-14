@@ -1,3 +1,4 @@
+from compile_objects import auto_download
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic)
 from design_space import Domain
@@ -38,6 +39,8 @@ class SingleObjectiveBO:
             self.iterate()
             
 if __name__=='__main__':
+    auto_download()
+    
     domain=Domain(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='ElapsedMetric')
     BO=SingleObjectiveBO(domain)
     BO.run()

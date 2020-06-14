@@ -39,7 +39,7 @@ class Domain:
         coordinates=[]
         policy_names=['theta','phi','beta']
         policy_vmin=[0,math.pi/4,0.]
-        policy_vmax=[math.pi*2,math.pi/2,math.pi*2]
+        policy_vmax=[math.pi*2,math.pi/2*0.99,math.pi*2]    #*0.99 to phi will avoid Gimbal lock of Euler angles
         for d in range(3):
             if policy_space[d] is not None:
                 css=[]
