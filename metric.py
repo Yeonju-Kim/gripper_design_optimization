@@ -14,6 +14,7 @@ class Metric:
     
 class MassMetric(Metric):
     #this is the mass of the gripper
+    OBJECT_DEPENDENT=False
     
     def __init__(self,controller):
         Metric.__init__(self,controller)
@@ -24,6 +25,7 @@ class MassMetric(Metric):
         
 class SizeMetric(Metric):
     #this is the surface area of the bounding box
+    OBJECT_DEPENDENT=False
     
     def __init__(self,controller):
         Metric.__init__(self,controller)
@@ -43,6 +45,7 @@ class SizeMetric(Metric):
         
 class Q1Metric(Metric):
     #this is the grasp quality measured after close
+    OBJECT_DEPENDENT=True
     
     def __init__(self,controller,friction=0.7):
         Metric.__init__(self,controller)
@@ -59,6 +62,7 @@ class Q1Metric(Metric):
         
 class QInfMetric(Q1Metric):
     #this is the grasp quality measured after close
+    OBJECT_DEPENDENT=True
     
     def __init__(self,controller,friction=0.7):
         Q1Metric.__init__(self,controller,friction)
@@ -70,6 +74,7 @@ class QInfMetric(Q1Metric):
         
 class QMSVMetric(Q1Metric):
     #this is the grasp quality measured after close
+    OBJECT_DEPENDENT=True
     
     def __init__(self,controller,friction=0.7):
         Q1Metric.__init__(self,controller,friction)
@@ -81,6 +86,7 @@ class QMSVMetric(Q1Metric):
    
 class QVEWMetric(Q1Metric):
     #this is the grasp quality measured after close
+    OBJECT_DEPENDENT=True
     
     def __init__(self,controller,friction=0.7):
         Q1Metric.__init__(self,controller,friction)
@@ -92,6 +98,7 @@ class QVEWMetric(Q1Metric):
      
 class QG11Metric(Q1Metric):
     #this is the grasp quality measured after close
+    OBJECT_DEPENDENT=True
     
     def __init__(self,controller,friction=0.7):
         Q1Metric.__init__(self,controller,friction)
@@ -103,6 +110,7 @@ class QG11Metric(Q1Metric):
         
 class LiftMetric(Metric):
     #this metric measures whether the gripper can close, and then lift, and finally shake
+    OBJECT_DEPENDENT=True
     
     def __init__(self,controller):
         Metric.__init__(self,controller)
@@ -119,6 +127,7 @@ class LiftMetric(Metric):
 
 class ElapsedMetric(Metric):
     #this metric measures how much time can the current gripper grasp the object
+    OBJECT_DEPENDENT=True
     
     def __init__(self,controller):
         Metric.__init__(self,controller)

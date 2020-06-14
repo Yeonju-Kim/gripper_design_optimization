@@ -375,7 +375,7 @@ if __name__=='__main__':
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
     actuator=ET.SubElement(root,'actuator')
-    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
+    link=gripper.get_robot(finger_length=0.4)#(base_off=0.3,finger_width=0.4,finger_curvature=2)
     link.compile_gripper(body,asset,actuator,path)
     
     open(path+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
