@@ -1,5 +1,6 @@
 # gripper_design_optimization
 
+# Mujoco Installation
 
 Download ObjectNet3D.zip file from: https://cvgl.stanford.edu/projects/objectnet3d/
 In Zherong's version, this download is automatic and defined in compile_objects.py::auto_download()
@@ -22,3 +23,11 @@ Step 5: Add the following lines to /home/${User}/.bashrc
 Step 6: Install MuJoCo's python interface by typing: sudo easy_install mujoco-py
 
 Step 7: Run python3 compile_world.py
+
+#Grasp Metric C++ Part Installation
+
+We use an advanced algorithm to compute Q_1 Q_{Inf} Q_{MSV} Q_{VEW} Q_{G11} metrics. 
+These algorithms are implemented in C++, to install it, use the following commands:
+
+    cd GraspMetric
+    sudo python3 setup.py install
