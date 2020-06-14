@@ -2,8 +2,8 @@ from compile_objects import auto_download
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic)
 from design_space import Domain
+import DIRECT,pickle
 import numpy as np
-import DIRECT
 
 class SingleObjectiveBO:
     def __init__(self,domain,kappa=10.):
@@ -37,10 +37,26 @@ class SingleObjectiveBO:
         for i in range(num_iter):
             print("Single-Objective BO Iter=%d!"%i)
             self.iterate()
+          
+    def load(self,filename):
+        self.points,self.scores=pickle.load(open(filename,'rb'))
+        self.gp.fit(self.points,self.scores)
             
+    def save(self,filename):
+        pickle.dump((self.points,self.scores),open(filename,'wb'))
+            
+    def get_best(self):
+        kappa_tmp=self.kappa
+        def obj(x,user_data):
+            return self.acquisition(x),0
+        point,acquisition_val,ierror=DIRECT.solve(obj,self.domain.vmin,self.domain.vmax)
+        self.kappa=kappa_tmp
+        return point
+
 if __name__=='__main__':
     auto_download()
     
     domain=Domain(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='ElapsedMetric')
     BO=SingleObjectiveBO(domain)
     BO.run()
+    BO.save('BO.dat')
