@@ -24,7 +24,7 @@ Step 6: Install MuJoCo's python interface by typing: sudo easy_install mujoco-py
 
 Step 7: Run python3 compile_world.py
 
-#Grasp Metric C++ Part Installation
+# C++ Grasp Metric Computer Installation
 
 We use an advanced algorithm to compute Q_1 Q_{Inf} Q_{MSV} Q_{VEW} Q_{G11} metrics. 
 These algorithms are implemented in C++, to install it, use the following commands:
