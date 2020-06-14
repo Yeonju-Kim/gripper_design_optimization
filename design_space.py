@@ -107,7 +107,7 @@ class Domain:
             for p in policies:
                 ctrl.reset(id,self.init_pos(p[0],p[1]),p[2])
                 while not ctrl.step():pass
-                print('Experimented!')
+                #print('Experimented!')
                 score_obj=[max(so,m(ctrl).compute()) if m.OBJECT_DEPENDENT else 0. for so,m in zip(score_obj,self.metrics)]
             score=[so+s for so,s in zip(score_obj,score)]
         #take mean over objects
