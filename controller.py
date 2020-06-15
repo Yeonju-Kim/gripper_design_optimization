@@ -60,6 +60,8 @@ class Controller:
         self.shaked=False
         self.shake_count=0
         self.elapsed=0.0
+        self.contact_poses=[]
+        self.contact_normals=[]
     
     def record_contacts(self):
         #get object pos
@@ -130,8 +132,6 @@ class Controller:
         self.elapsed+=1
         fc,_=self.contact_state()
         if fc:  #if floor contact, immediately return false
-            self.contact_poses=[]
-            self.contact_normals=[]
             return False
         state=self.sim.get_state()
         maxVel=max([abs(q) for q in self.link.fetch_q(state.qvel)])

@@ -75,7 +75,7 @@ class HyperVolumeTransformedProblemBO(ProblemBO):
         #gripper_metrics[pt_id][metric_id]
         #object_metrics[pt_id][policy_id][object_id][metric_id]
         gripper_metrics,object_metrics=self.inner.compute_metrics(points)
-        gripper_metrics=np.expand_dims(gripper_metrics,axis=1).expand_dims(gripper_metrics,axis=1)
+        gripper_metrics=np.expand_dims(np.expand_dims(gripper_metrics,axis=1),axis=1)
         combined_metrics=(object_metrics+gripper_metrics).prod(axis=3)
         #mean over objects, max over policies
         combined_metrics=combined_metrics.max(axis=1).mean(axis=1)
