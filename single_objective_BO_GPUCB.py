@@ -58,7 +58,7 @@ class SingleObjectiveBOGPUCB:
     def get_best(self):
         kappa_tmp=self.kappa
         def obj(x,user_data):
-            return self.acquisition(x),0
+            return -self.acquisition(x),0
         point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax)
         self.kappa=kappa_tmp
         return point

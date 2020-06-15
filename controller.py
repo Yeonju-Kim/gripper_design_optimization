@@ -108,7 +108,7 @@ class Controller:
         #return succeed or failed
         self.sim.step()
         fc,oc=self.contact_state()
-        if fc:
+        if fc:  #if floor contact, immediately return false
             return False
         if oc:
             self.approached=True
@@ -128,6 +128,11 @@ class Controller:
         #return succeed or failed (actually close will always succeed)
         self.sim.step()
         self.elapsed+=1
+        fc,_=self.contact_state()
+        if fc:  #if floor contact, immediately return false
+            self.contact_poses=[]
+            self.contact_normals=[]
+            return False
         state=self.sim.get_state()
         maxVel=max([abs(q) for q in self.link.fetch_q(state.qvel)])
         if maxVel<self.thres_vel:  #we assume closed when the velocity is small enough
@@ -149,7 +154,7 @@ class Controller:
         self.sim.step()
         self.elapsed+=1
         fc,oc=self.contact_state()
-        if not oc:  #if no object contact, immediately return false
+        if fc or not oc:  #if floor contact or no object contact, immediately return false
             return False
         
         #return succeed or failed based on whether gripper is still in contact with object
@@ -184,7 +189,7 @@ class Controller:
         self.sim.step()
         self.elapsed+=1
         fc,oc=self.contact_state()
-        if not oc:  #if no object contact, immediately return false
+        if fc or not oc:  #if floor contact or no object contact, immediately return false
             return False
         
         #return succeed or failed based on whether gripper is still in contact with object
