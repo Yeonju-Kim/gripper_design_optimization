@@ -65,11 +65,12 @@ class Test2D1MProblemBO(ProblemBO):
         return 'Test2D1MProblemBO'
     
 class HyperVolumeTransformedProblemBO(ProblemBO):
-    def __init__(self,inner):
+    def __init__(self,inner,scale=1.):
         self.inner=inner
         self.vmin=inner.vmin
         self.vmax=inner.vmax
         self.metrics=['HyperVolumeMetric']
+        self.scale=scale
         
     def eval(self,points):
         #gripper_metrics[pt_id][metric_id]
@@ -79,7 +80,7 @@ class HyperVolumeTransformedProblemBO(ProblemBO):
         combined_metrics=(object_metrics+gripper_metrics).prod(axis=3)
         #mean over objects, max over policies
         combined_metrics=combined_metrics.max(axis=1).mean(axis=1)
-        return combined_metrics.tolist()
+        return [[m*self.scale] for m in combined_metrics.tolist()]
         
     def name(self):
         return 'HyperVolumeTransformed('+self.inner.name()+')'

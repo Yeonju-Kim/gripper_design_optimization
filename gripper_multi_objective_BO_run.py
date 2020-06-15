@@ -4,15 +4,15 @@ from problem_BO import HyperVolumeTransformedProblemBO
 from compile_objects import auto_download
 import os
 
-plot=True
-test=False
+plot=False
+test=True
 if __name__=='__main__':
     auto_download()
     
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|Q1Metric',
                             object_file_name='data/ObjectNet3D/CAD/off/cup/05.off',
                             policy_space=[5,5,5,3.])
-    domain=HyperVolumeTransformedProblemBO(domain)
+    domain=HyperVolumeTransformedProblemBO(domain,scale=100.)
     BO=SingleObjectiveBOGPUCB(domain,nu=10.)
     
     #main loop

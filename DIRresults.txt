@@ -1,0 +1,45 @@
+--------------------------------- Log file --------------------------------
+DIRECT Version 2.0.4
+ Problem Dimension n                    :      2
+ Eps value                              :   0.1000E-03
+ Maximum number of f-evaluations (maxf) :  20000
+ Maximum number of iterations (MaxT)    :   6000
+ Value of f_global                      :  -0.1000+101
+ Global percentage wanted               :   0.1000E-01
+ Volume percentage wanted               :  -0.1000E+01
+ Measure percentage wanted              :  -0.1000E+01
+ Epsilon is constant.
+ Jones original DIRECT algorithm is used.
+Bounds on variable x 1    :      0.20000 <= xi <=      0.50000
+Bounds on variable x 2    :     -2.00000 <= xi <=      2.00000
+---------------------------------------------------------------------------
+ Iteration   # of f-eval.   fmin
+    1           5          -7.1432685305
+    3          13          -7.4548057596
+    5          27          -7.5730283573
+    6          33          -7.6469204908
+    8          49          -7.7658730544
+   11          87          -7.7698817152
+   12          99          -7.7701781075
+   13         111          -7.7889866049
+   14         115          -7.8970377685
+   15         125          -7.9014083065
+   17         147          -7.9045923156
+   18         165          -7.9069824229
+   19         185          -7.9070312460
+   24         279          -7.9070712052
+   28         377          -7.9071087603
+   56        1081          -7.9071111328
+   90        2061          -7.9071114964
+  198        4947          -7.9087836812
+  199        4965          -7.9087894597
+  200        4989          -7.9097163302
+  708       18027          -7.9100252832
+DIRECT stopped: numfunc >= maxf.
+--------------------------------- Summary --------------------------------
+Final function value           :   -7.9100253
+Number of function evaluations :        20009
+Index  Final solution   x(i) - l(i)   u(i) - x(i) 
+    1    0.2000025       0.0000025      0.2999975
+    2    1.5211096       3.5211096      0.4788904
+---------------------------------------------------------------------------
