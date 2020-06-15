@@ -2,6 +2,7 @@ from compile_objects import auto_download,compile_objects,get_COM
 from compile_gripper import Link,Gripper,set_simulator_option
 import mujoco_py as mjc
 import lxml.etree as ET
+import os
 
 def create_fog(mujoco):
     #<visual>
@@ -92,7 +93,7 @@ class World:
         
         #link
         if link is not None:
-            link.compile_gripper(body,asset,actuator,path,damping_gripper)
+            link.compile_gripper(body,asset,actuator,path,damping_gripper,name_suffix='PID='+str(os.getpid()))
             self.link=link
         else: self.link=None
         return root
@@ -154,8 +155,8 @@ class World:
 
     def compile_simulator(self,object_file_name=None,link=None,path='data/gripper',*,damping=10,damping_gripper=1000,scale_obj=2):
         root=self.compile(object_file_name=object_file_name,link=link,path=path,damping=damping,damping_gripper=damping_gripper,scale_obj=scale_obj)
-        open(path+'/world.xml','w').write(ET.tostring(root,pretty_print=True).decode())
-        model=mjc.load_model_from_path(path+'/world.xml')
+        open(path+'/world_PID='+str(os.getpid())+'.xml','w').write(ET.tostring(root,pretty_print=True).decode())
+        model=mjc.load_model_from_path(path+'/world_PID='+str(os.getpid())+'.xml')
         self.sim=mjc.MjSim(model)
         self.get_sim_info()
         self.test_object(0)

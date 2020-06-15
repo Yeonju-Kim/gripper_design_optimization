@@ -20,7 +20,7 @@ def auto_download():
     if not os.path.exists('data/ObjectNet3D'):
         os.system('unzip data/ObjectNet3D_cads.zip -d data')
 
-def ensure_stl(obj,force=True):
+def ensure_stl(obj,force=False):
     if (not obj.endswith('stl') and not obj.endswith('STL')) or force:
         ret=os.path.splitext(obj)[0]+'.stl'
         if not os.path.exists(ret) or force:
@@ -33,7 +33,7 @@ def get_COM(obj):
     mesh=tm.exchange.load.load(obj)
     return mesh.center_mass,mesh.bounds
 
-def compile_objects(asset,object_file_name,scale_obj=None,force=True):
+def compile_objects(asset,object_file_name,scale_obj=None,force=False):
     names = []
     fullnames = []
     object_list = glob.glob(object_file_name)

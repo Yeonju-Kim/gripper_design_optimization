@@ -123,7 +123,7 @@ class Link:
         q=tm.transformations.quaternion_from_matrix(self.trans[0:3,0:3])
         return str(q[0])+' '+str(q[1])+' '+str(q[2])+' '+str(q[3])
 
-    def compile_gripper(self,body,asset,actuator,path,damping=1000.0,gear=1):
+    def compile_gripper(self,body,asset,actuator,path,damping=1000.0,gear=1,*,name_suffix=''):
         b=ET.SubElement(body,'body')
         b.set('pos',self.get_pos())
         b.set('quat',self.get_quat())
@@ -174,23 +174,23 @@ class Link:
         if not path.endswith('/'):
             path+='/'
         if self.parent is None:
-            as_mesh(self.geom).export(path+'base.stl')
+            as_mesh(self.geom).export(path+'base_'+name_suffix+'.stl')
             mesh=ET.SubElement(asset,'mesh')
-            mesh.set('file','base.stl')
+            mesh.set('file','base_'+name_suffix+'.stl')
             mesh.set('name',self.nameMesh)
         elif self.finger_id()==0 and self.parent.parent is None:
-            as_mesh(self.geom).export(path+'finger.stl')
+            as_mesh(self.geom).export(path+'finger_'+name_suffix+'.stl')
             mesh=ET.SubElement(asset,'mesh')
-            mesh.set('file','finger.stl')
+            mesh.set('file','finger_'+name_suffix+'.stl')
             mesh.set('name',self.nameMesh)
         elif self.finger_id()==0 and len(self.children)==0:
-            as_mesh(self.geom).export(path+'fingerTop.stl')
+            as_mesh(self.geom).export(path+'fingerTop_'+name_suffix+'.stl')
             mesh=ET.SubElement(asset,'mesh')
-            mesh.set('file','fingerTop.stl')
+            mesh.set('file','fingerTop_'+name_suffix+'.stl')
             mesh.set('name',self.nameMesh)
         #children
         for c in self.children:
-            c.compile_gripper(b,asset,actuator=actuator,path=path,gear=gear)
+            c.compile_gripper(b,asset,actuator=actuator,path=path,gear=gear,name_suffix=name_suffix)
 
     def finger_id(self):
         if self.parent.parent is None:

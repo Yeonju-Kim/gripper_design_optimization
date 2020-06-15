@@ -235,6 +235,7 @@ if __name__=='__main__':
     
     #create controller
     controller=Controller(world)
+    
     id=0
     while True:
         controller.reset(id,[0.1,0.,5.],-0.1)
