@@ -6,6 +6,7 @@ import pyGraspMetric as gm
 import mujoco_py as mjc
 
 class Metric:
+    #Note that all metrics are supposed to be maximized
     def __init__(self):
         pass
     
@@ -24,7 +25,7 @@ class MassMetric(Metric):
             link=self.controller
         else: link=self.controller.world.link
         mesh=as_mesh(link.get_mesh())
-        return mesh.mass
+        return 1./mesh.mass
         
 class SizeMetric(Metric):
     #this is the surface area of the bounding box
@@ -47,7 +48,7 @@ class SizeMetric(Metric):
                 if d2!=d:
                     ext.append(vmax[d2]-vmin[d2])
             surface_area+=ext[0]*ext[1]*2
-        return surface_area
+        return 1./surface_area
         
 class Q1Metric(Metric):
     #this is the grasp quality measured after close

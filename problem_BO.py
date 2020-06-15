@@ -1,4 +1,5 @@
 from metric import Metric
+import numpy as np
 import math
 
 class ProblemBO:
@@ -62,6 +63,20 @@ class Test2D1MProblemBO(ProblemBO):
     
     def name(self):
         return 'Test2D1MProblemBO'
+    
+class HyperVolumeTransformedProblemBO(ProblemBO):
+    def __init__(self,inner):
+        self.inner=inner
+        self.vmin=inner.vmin
+        self.vmax=inner.vmax
+        self.metrics=['HyperVolumeMetric']
+        
+    def eval(self,points):
+        metrics=self.inner.eval(points)
+        return [[np.prod(m)] for m in metrics]
+        
+    def name(self):
+        return 'HyperVolumeTransformed('+self.inner.name()+')'
     
 if __name__=='__main__':
     print(Test1D1MProblemBO().eval([[0.1],[0.2],[0.3]]))

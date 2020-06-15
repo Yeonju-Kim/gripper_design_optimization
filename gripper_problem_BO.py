@@ -163,6 +163,35 @@ class GripperProblemBO(ProblemBO):
         z=math.sin(phi)*self.init_dist
         return [x,y,z]
 
+    def plot_solution(self,point,metric_id):
+        _,object_metrics=self.compute_metrics([point])
+        object_metrics=np.array(object_metrics)[0,:,:,metric_id].argmax(axis=0)
+        
+        #compile to MuJoCo
+        world=World()
+        link,_=self.compute_gripper_dependent_metrics(point)
+        world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,object_file_name=self.object_file_name,link=link)
+        ctrl=Controller(world)
+
+        viewer=mjc.MjViewer(world.sim)
+        while True:
+            for id in range(len(world.names)):
+                policy=self.policies[object_metrics[id]]
+                for n,v in zip(self.vname,point):
+                    if n=='theta':
+                        policy[0]=v
+                    elif n=='phi':
+                        policy[1]=v
+                    elif n=='beta':
+                        policy[2]=v
+                        
+                theta=policy[0]
+                phi=policy[1]
+                beta=policy[2]
+                ctrl.reset(id,self.init_pos(theta,phi),beta)
+                while not ctrl.step():
+                    viewer.render()
+
     def __str__(self):
         import glob
         ret='ProblemBO:\n'
