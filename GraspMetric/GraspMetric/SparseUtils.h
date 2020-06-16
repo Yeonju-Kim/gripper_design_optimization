@@ -160,8 +160,8 @@ bool writeBinaryData(const Eigen::SparseMatrix<T,O,I>& m,std::ostream& os,IOData
     }
   for(sizeType k=0; k<m.outerSize(); ++k)
     c[k+1]+=c[k];
-  writeBinaryData(m.rows(),os);
-  writeBinaryData(m.cols(),os);
+  writeBinaryData((sizeType)m.rows(),os);
+  writeBinaryData((sizeType)m.cols(),os);
   writeBinaryData(r,os);
   writeBinaryData(c,os);
   writeBinaryData(v,os);
