@@ -5,23 +5,18 @@
 
 PRJ_BEGIN
 
-template <typename T>
 struct RigidBodyMass {
-  typedef typename ObjMeshTraits<T>::Type OBJMESH;
-  typedef typename ScalarUtil<T>::ScalarVec3 VEC3;
-  typedef typename ScalarUtil<T>::ScalarMat6 MAT6;
-  typedef typename ScalarUtil<T>::ScalarMat3 MAT3;
-  RigidBodyMass(const OBJMESH& mesh);
-  VEC3 getCtr() const;
-  MAT6 getMass() const;
-  MAT6 getMassCOM() const;
-  T getM() const;
-  VEC3 getMC() const;
-  MAT3 getMCCT() const;
+  RigidBodyMass(const ObjMesh& mesh);
+  Vec3 getCtr() const;
+  Mat6 getMass() const;
+  Mat6 getMassCOM() const;
+  scalar getM() const;
+  Vec3 getMC() const;
+  Mat3 getMCCT() const;
 private:
-  MAT6 _mat,_matCOM;
-  VEC3 _ctr;
-  MAT3 _MCCT;
+  Mat6 _mat,_matCOM;
+  Vec3 _ctr;
+  Mat3 _MCCT;
 };
 
 PRJ_END

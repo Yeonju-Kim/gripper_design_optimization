@@ -1111,8 +1111,10 @@ void GraspMesh::assembleContacts()
     _wFromF.block<3,3>(3,i*3)-=cross<scalarD>(_contacts[i]);
   }
   //compute inertia tensor
-  RigidBodyMass<scalarD> m(_mesh);
-  Mat3d I=m.getMassCOM().block<3,3>(3,3);
+  ObjMesh meshScalar;
+  _mesh.cast<scalar>(meshScalar);
+  RigidBodyMass m(meshScalar);
+  Mat3d I=m.getMassCOM().block<3,3>(3,3).cast<scalarD>();
   //I: (yy+zz  -xy   -xz )
   //   ( -xy  xx+zz  -yz )
   //   ( -xz   -yz  xx+yy)
