@@ -1,3 +1,4 @@
+#ifdef CGAL_SUPPORT
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Mesh_triangulation_3.h>
 #include <CGAL/Mesh_complex_3_in_triangulation_3.h>
@@ -26,9 +27,12 @@ typedef CGAL::Mesh_complex_3_in_triangulation_3<Tr> C3t3;
 typedef CGAL::Mesh_criteria_3<Tr> Mesh_criteria;
 // To avoid verbose function and named parameters call
 using namespace CGAL::parameters;
-#include "Utils.h"
+#endif
 #include "GraspVolumeMesh.h"
-#include "boost/filesystem/fstream.hpp"
+#include <unordered_map>
+#include <unordered_set>
+#include <fstream>
+#include "Utils.h"
 
 USE_PRJ_NAMESPACE
 
@@ -83,8 +87,8 @@ void GraspVolumeMesh::meshToABQ(std::istream& is,std::ostream& os,bool CGAL)
 }
 void GraspVolumeMesh::meshToABQ(const std::string& is,const std::string& os,bool CGAL)
 {
-  boost::filesystem::ifstream inf(is);
-  boost::filesystem::ofstream outf(os);
+  std::ifstream inf(is);
+  std::ofstream outf(os);
   meshToABQ(inf,outf,CGAL);
 }
 void GraspVolumeMesh::objToOFF(const ObjMeshD& mesh,std::ostream& os)
@@ -102,11 +106,12 @@ void GraspVolumeMesh::objToOFF(const ObjMeshD& mesh,std::ostream& os)
 }
 void GraspVolumeMesh::objToOFF(const ObjMeshD& mesh,const std::string& os)
 {
-  boost::filesystem::ofstream outf(os);
+  std::ofstream outf(os);
   objToOFF(mesh,outf);
 }
 void GraspVolumeMesh::OFFToMesh(std::istream& is,std::ostream& os,scalar sizeF)
 {
+#ifdef CGAL_SUPPORT
   Polyhedron polyhedron;
   is >> polyhedron;
   Mesh_domain domain(polyhedron);
@@ -119,21 +124,24 @@ void GraspVolumeMesh::OFFToMesh(std::istream& is,std::ostream& os,scalar sizeF)
   C3t3 c3t3=CGAL::make_mesh_3<C3t3>(domain,criteria,no_perturb(),no_exude());
   CGAL::refine_mesh_3(c3t3,domain,criteria,lloyd());
   c3t3.output_to_medit(os);
+#else
+  FUNCTION_NOT_IMPLEMENTED
+#endif
 }
 void GraspVolumeMesh::OFFToMesh(const std::string& is,const std::string& os,scalar sizeF)
 {
-  boost::filesystem::ifstream inf(is);
-  boost::filesystem::ofstream outf(os);
+  std::ifstream inf(is);
+  std::ofstream outf(os);
   OFFToMesh(inf,outf,sizeF);
 }
 void GraspVolumeMesh::makeBoxes(ObjMeshD& mesh,std::vector<Vec3i,Eigen::aligned_allocator<Vec3i>>& css,scalarD coef)
 {
-  boost::unordered_set<Vec3i,Hash> cssSet;
-  boost::unordered_map<Vec3i,sizeType,Hash> vssMap;
+  std::unordered_set<Vec3i,Hash> cssSet;
+  std::unordered_map<Vec3i,sizeType,Hash> vssMap;
   cssSet.insert(css.begin(),css.end());
 
   //vertices
-  for(boost::unordered_set<Vec3i,Hash>::const_iterator
+  for(std::unordered_set<Vec3i,Hash>::const_iterator
       beg=cssSet.begin(),end=cssSet.end(); beg!=end; beg++)
   {
     const Vec3i& id=*beg;
@@ -146,13 +154,13 @@ void GraspVolumeMesh::makeBoxes(ObjMeshD& mesh,std::vector<Vec3i,Eigen::aligned_
           }
   }
   mesh.getV().resize(vssMap.size());
-  for(boost::unordered_map<Vec3i,sizeType,Hash>::const_iterator
+  for(std::unordered_map<Vec3i,sizeType,Hash>::const_iterator
       beg=vssMap.begin(),end=vssMap.end(); beg!=end; beg++)
     mesh.getV()[beg->second]=(beg->first.cast<scalarD>()-Vec3d::Constant(0.5f))*coef;
 
   //indices
   mesh.getI().clear();
-  for(boost::unordered_set<Vec3i,Hash>::const_iterator
+  for(std::unordered_set<Vec3i,Hash>::const_iterator
       beg=cssSet.begin(),end=cssSet.end(); beg!=end; beg++)
   {
     const Vec3i& id=*beg;
@@ -176,6 +184,7 @@ void GraspVolumeMesh::makeBoxes(ObjMeshD& mesh,std::vector<Vec3i,Eigen::aligned_
 }
 void GraspVolumeMesh::readOFF(std::istream& is,ObjMeshD& mesh)
 {
+#ifdef CGAL_SUPPORT
   Polyhedron poly;
   is >> poly;
   {
@@ -184,4 +193,7 @@ void GraspVolumeMesh::readOFF(std::istream& is,ObjMeshD& mesh)
   }
   std::ifstream isObj("tmp.obj");
   mesh.read(isObj,false,false);
+#else
+  FUNCTION_NOT_IMPLEMENTED
+#endif
 }

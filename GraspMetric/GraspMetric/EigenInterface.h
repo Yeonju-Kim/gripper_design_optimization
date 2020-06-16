@@ -69,7 +69,7 @@ public:
   using LinearSolverInterface::recompute;
   using LinearSolverInterface::recomputeKKT;
   using LinearSolverInterface::solve;
-  virtual boost::shared_ptr<LinearSolverInterface> copy() const override;
+  virtual std::shared_ptr<LinearSolverInterface> copy() const override;
   virtual bool recompute(const SMat& smat,scalarD shift,bool sameA) override;
   virtual const Matd& solve(const Matd& b) override;
 protected:

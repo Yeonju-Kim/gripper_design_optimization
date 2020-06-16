@@ -175,15 +175,15 @@ std::shared_ptr<LinearSolverInterface> LinearSolverTraits<Objective<scalarD>::SM
 {
 #ifdef SuperLU_SUPPORT
 #ifdef QUADMATH_SUPPORT
-  return boost::shared_ptr<LinearSolverInterface>(new EigenLUInterface);
+  return std::shared_ptr<LinearSolverInterface>(new EigenLUInterface);
 #else
-  return boost::shared_ptr<LinearSolverInterface>(new EigenSuperLUInterface);
+  return std::shared_ptr<LinearSolverInterface>(new EigenSuperLUInterface);
 #endif
 #endif
 
 #ifdef UMFPACK_SUPPORT
 #ifdef QUADMATH_SUPPORT
-  return boost::shared_ptr<LinearSolverInterface>(new EigenLUInterface);
+  return std::shared_ptr<LinearSolverInterface>(new EigenLUInterface);
 #else
   return std::shared_ptr<LinearSolverInterface>(new UmfpackInterface);
 #endif

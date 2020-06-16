@@ -69,8 +69,14 @@ scalarD SupportQ1Mosek::supportPoint(const Vec6d& d,const IDSET& ids,bool direct
 }
 void SupportQ1Mosek::fNormConstraint(const IDSET& ids)
 {
-  //\sum||f||^2<=1
-  _model->constraint("sumF",ExprM::vstack(1,_fStacked),DomainM::inQCone());
+  //\sum f_N<=1
+  sizeType off=0;
+  monty::rc_ptr<ExpressionM> fN;
+  for(IDSET::const_iterator beg=ids.begin(),end=ids.end(); beg!=end; beg++,off++)
+    if(fN.get()==NULL)
+      fN=ExprM::dot(MosekInterface::toMosek(Cold(_mesh->inNormal(*beg))),_fss[off]);
+    else fN=ExprM::add(fN,ExprM::dot(MosekInterface::toMosek(Cold(_mesh->inNormal(*beg))),_fss[off]));
+  _model->constraint("FN",fN,DomainM::lessThan(1));
 }
 void SupportQ1Mosek::clearModel()
 {

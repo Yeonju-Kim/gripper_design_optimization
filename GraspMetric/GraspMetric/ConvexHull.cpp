@@ -1,14 +1,8 @@
 #include "ConvexHull.h"
-extern "C"
-{
-#include <libqhull/qhull_a.h>
-}
-#include <CGAL/Convex_hull_d.h>
-#include <CGAL/Cartesian_d.h>
-#include <CGAL/Gmpq.h>
 
 USE_PRJ_NAMESPACE
 
+PRJ_BEGIN
 //ConvexHull<DIM>
 template <int DIM>
 void ConvexHull<DIM>::insertInit(const PTS& pss)
@@ -34,7 +28,15 @@ Vec6d ConvexHull<DIM>::mulT(const Eigen::Matrix<scalarD,DIM,6>* basis,const PT& 
     return ret;
   }
 }
+template class ConvexHull<5>;
+template class ConvexHull<6>;
+PRJ_END
 
+#ifdef CGAL_SUPPORT
+#include <CGAL/Convex_hull_d.h>
+#include <CGAL/Cartesian_d.h>
+#include <CGAL/Gmpq.h>
+PRJ_BEGIN
 //CGALConvexHull<DIM>
 template <int DIM>
 CGALConvexHull<DIM>::CGALConvexHull()
@@ -85,7 +87,17 @@ scalarD CGALConvexHull<DIM>::distToOrigin(PT& blockingPN)
   }
   return Q;
 }
+template class CGALConvexHull<5>;
+template class CGALConvexHull<6>;
+PRJ_END
+#endif
 
+#ifdef QHULL_SUPPORT
+extern "C"
+{
+#include <libqhull/qhull_a.h>
+}
+PRJ_BEGIN
 //QHullConvexHull<DIM>
 #define NR_PT_INIT 100
 template <int DIM>
@@ -201,11 +213,7 @@ void QHullConvexHull<DIM>::freeQHull()
     _memPt=NULL;
   }
 }
-
-//instance
-#define DECL_HULL(DIM)  \
-template class ConvexHull<DIM>; \
-template class CGALConvexHull<DIM>; \
-template class QHullConvexHull<DIM>;
-DECL_HULL(5)
-DECL_HULL(6)
+template class QHullConvexHull<5>;
+template class QHullConvexHull<6>;
+PRJ_END
+#endif

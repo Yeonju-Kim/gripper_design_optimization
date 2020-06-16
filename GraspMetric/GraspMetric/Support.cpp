@@ -31,16 +31,11 @@ std::shared_ptr<Support> Support::createQ1
   if(_useMosek)
     return std::shared_ptr<Support>(new SupportQ1Mosek(mesh,metric,metricSqrt));
 #endif
+#ifdef SCS_SUPPORT
   if(_useSCS)
     return std::shared_ptr<Support>(new SupportQ1SCS(mesh,metric,metricSqrt));
-#ifdef USE_MOSEK
-  //INFO("Using Mosek!")
-  return std::shared_ptr<Support>(new SupportQ1Mosek(mesh,metric,metricSqrt));
 #endif
-#ifdef USE_SCS
-  //INFO("Using SCS!")
-  return std::shared_ptr<Support>(new SupportQ1SCS(mesh,metric,metricSqrt));
-#endif
+  return std::shared_ptr<Support>(new SupportQ1Analytic(mesh,metric,metricSqrt));
   ASSERT_MSG(false,"Cannot find support configuration!")
   return std::shared_ptr<Support>();
 }
@@ -51,16 +46,11 @@ std::shared_ptr<Support> Support::createQInf
   if(_useMosek)
     return std::shared_ptr<Support>(new SupportQInfMosek(mesh,metric,metricSqrt));
 #endif
+#ifdef SCS_SUPPORT
   if(_useSCS)
     return std::shared_ptr<Support>(new SupportQInfSCS(mesh,metric,metricSqrt));
-#ifdef USE_MOSEK
-  //INFO("Using Mosek!")
-  return std::shared_ptr<Support>(new SupportQInfMosek(mesh,metric,metricSqrt));
 #endif
-#ifdef USE_SCS
-  //INFO("Using SCS!")
-  return std::shared_ptr<Support>(new SupportQInfSCS(mesh,metric,metricSqrt));
-#endif
+  return std::shared_ptr<Support>(new SupportQInfAnalytic(mesh,metric,metricSqrt));
   ASSERT_MSG(false,"Cannot find support configuration!")
   return std::shared_ptr<Support>();
 }
@@ -74,20 +64,33 @@ std::shared_ptr<Support> Support::createQSM
   if(_useMosek)
     return std::shared_ptr<Support>(new SupportQSMMosek(mesh,metric,metricSqrt,sigmaIds,progressive,scale));
 #endif
+
+#ifdef SCS_SUPPORT
   if(_useSCS)
     return std::shared_ptr<Support>(new SupportQSMSCS(mesh,metric,metricSqrt,sigmaIds,progressive,scale));
+#endif
+
+#ifdef MOSEK_SUPPORT
 #ifdef USE_MOSEK_CUTSDP
   //INFO("Using Mosek CutSDP!")
   return std::shared_ptr<Support>(new SupportQSMCutMosek(mesh,metric,metricSqrt,sigmaIds,progressive,scale));
 #endif
+#endif
+
+#ifdef MOSEK_SUPPORT
 #ifdef USE_MOSEK
   //INFO("Using Mosek!")
   return std::shared_ptr<Support>(new SupportQSMMosek(mesh,metric,metricSqrt,sigmaIds,progressive,scale));
 #endif
+#endif
+
+#ifdef SCS_SUPPORT
 #ifdef USE_SCS
   //INFO("Using SCS!")
   return std::shared_ptr<Support>(new SupportQSMSCS(mesh,metric,metricSqrt,sigmaIds,progressive,scale));
 #endif
+#endif
+
   ASSERT_MSG(false,"Cannot find support configuration!")
   return std::shared_ptr<Support>();
 }
@@ -126,3 +129,35 @@ void Support::checkAndTestError()
 bool Support::_useMosekCutSDP=false;
 bool Support::_useMosek=false;
 bool Support::_useSCS=false;
+
+//Analytic
+SupportQ1Analytic::SupportQ1Analytic(std::shared_ptr<GraspMesh> mesh,const Matd& metric,const Mat6d& metricSqrt):Support(mesh,metric,metricSqrt) {}
+scalarD SupportQ1Analytic::supportPoint(const Vec6d& d,const IDSET& ids,bool directed)
+{
+  scalarD ret=0;
+  for(IDSET::const_iterator beg=ids.begin(),end=ids.end(); beg!=end; beg++) {
+    Eigen::Block<const Matd,6,3> G=_mesh->getG(*beg);
+    Vec3d n=_mesh->inNormal(*beg);
+    scalarD wPerp=d.dot(_metricSqrt*G*n);
+    scalarD wPara=(d.transpose()*(_metricSqrt*G*(Mat3d::Identity()-n*n.transpose()))).norm();
+    if(_mesh->theta()*wPerp>wPara)
+      ret=std::max(ret,wPerp+wPara*wPara/wPerp);
+    else ret=std::max(ret,std::max<scalarD>(0,wPerp+_mesh->theta()*wPara));
+  }
+  return ret;
+}
+SupportQInfAnalytic::SupportQInfAnalytic(std::shared_ptr<GraspMesh> mesh,const Matd& metric,const Mat6d& metricSqrt):Support(mesh,metric,metricSqrt) {}
+scalarD SupportQInfAnalytic::supportPoint(const Vec6d& d,const IDSET& ids,bool directed)
+{
+  scalarD ret=0;
+  for(IDSET::const_iterator beg=ids.begin(),end=ids.end(); beg!=end; beg++) {
+    Eigen::Block<const Matd,6,3> G=_mesh->getG(*beg);
+    Vec3d n=_mesh->inNormal(*beg);
+    scalarD wPerp=d.dot(_metricSqrt*G*n);
+    scalarD wPara=(d.transpose()*(_metricSqrt*G*(Mat3d::Identity()-n*n.transpose()))).norm();
+    if(_mesh->theta()*wPerp>wPara)
+      ret+=wPerp+wPara*wPara/wPerp;
+    else ret+=std::max<scalarD>(0,wPerp+_mesh->theta()*wPara);
+  }
+  return ret;
+}

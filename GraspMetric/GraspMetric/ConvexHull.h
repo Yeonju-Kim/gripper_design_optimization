@@ -18,6 +18,7 @@ public:
   static PT mul(const Eigen::Matrix<scalarD,DIM,6>* basis,const Vec6d& p);
   static Vec6d mulT(const Eigen::Matrix<scalarD,DIM,6>* basis,const PT& p);
 };
+#ifdef CGAL_SUPPORT
 template <int DIM>
 struct CGALConvexHull : public ConvexHull<DIM>
 {
@@ -31,6 +32,8 @@ public:
 private:
   void* _hull;
 };
+#endif
+#ifdef QHULL_SUPPORT
 template <int DIM>
 struct QHullConvexHull : public ConvexHull<DIM>
 {
@@ -48,6 +51,7 @@ private:
   sizeType _nrPtAll,_nrPtUsed;
   void* _memPt;
 };
+#endif
 
 PRJ_END
 

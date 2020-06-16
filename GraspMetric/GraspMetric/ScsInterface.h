@@ -1,5 +1,6 @@
 #ifndef SCS_INTERFACE_H
 #define SCS_INTERFACE_H
+#ifdef SCS_SUPPORT
 
 #include "CommonFile/MathBasic.h"
 #include "Objective.h"
@@ -63,4 +64,5 @@ protected:
 
 PRJ_END
 
+#endif
 #endif

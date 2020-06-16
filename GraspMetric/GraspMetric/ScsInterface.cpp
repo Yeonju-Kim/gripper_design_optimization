@@ -1,4 +1,5 @@
 #include "ScsInterface.h"
+#ifdef SCS_SUPPORT
 #include "util.h"
 #include "amatrix.h"
 
@@ -210,3 +211,4 @@ sizeType ScsInterface::SCRows(sizeType entries) const
 {
   return std::floor(std::sqrt(entries*2));
 }
+#endif

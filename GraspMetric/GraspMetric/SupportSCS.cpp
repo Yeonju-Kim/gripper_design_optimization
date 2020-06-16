@@ -1,4 +1,5 @@
 #include "Support.h"
+#ifdef SCS_SUPPORT
 #include "Utils.h"
 #include "SparseUtils.h"
 #include "ScsInterface.h"
@@ -51,14 +52,13 @@ scalarD SupportQ1SCS::supportPoint(const Vec6d& d,const IDSET& ids,bool directed
 }
 void SupportQ1SCS::fNormConstraint(const IDSET& ids)
 {
-  //\sum||f||^2<=1
-  ScsInterface::SMat A;
-  ScsInterface::STrips trips;
-  A.resize((sizeType)ids.size()*3+1,(sizeType)ids.size()*3);
-  for(sizeType i=0; i<(sizeType)ids.size()*3; i++)
-    trips.push_back(ScsInterface::STrip(i+1,i,1));
-  A.setFromTriplets(trips.begin(),trips.end());
-  _scs->constraintSecondOrder(A,0,Cold::Unit(A.rows(),0),ScsInterface::SECOND_ORDER);
+  //\sum f_N<=1
+  sizeType off=0;
+  ScsInterface::Vec coef;
+  coef.setZero(ids.size()*3);
+  for(IDSET::const_iterator beg=ids.begin(),end=ids.end(); beg!=end; beg++,off++)
+    coef.segment<3>(off*3)=_mesh->inNormal(*beg);
+  _scs->constraintLinear(coef,0,1,ScsInterface::INEQUALITY);
 }
 void SupportQ1SCS::clearModel()
 {
@@ -187,3 +187,4 @@ void SupportQSMSCS::debugFNorm(const IDSET& ids)
   }
   std::cout << std::endl;
 }
+#endif

@@ -15,7 +15,7 @@ class GraspMesh : public SerializableBase
 {
 public:
   typedef std::vector<sizeType> IDVEC;
-  //typedef boost::unordered_set<sizeType> IDSET;
+  //typedef std::unordered_set<sizeType> IDSET;
   typedef std::set<sizeType> IDSET;
   typedef Objective<scalarD>::SMat SMat;
   typedef Objective<scalarD>::STrip STrip;

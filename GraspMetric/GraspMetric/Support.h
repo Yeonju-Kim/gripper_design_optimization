@@ -97,6 +97,7 @@ private:
 };
 #endif
 //SCS
+#ifdef SCS_SUPPORT
 class SupportQ1SCS : public Support
 {
 public:
@@ -132,6 +133,20 @@ protected:
   bool _initFlag;
   //tmp
   IDSET _sigmaIdsActiveSet;
+};
+#endif
+//analytic
+class SupportQ1Analytic : public Support
+{
+public:
+  SupportQ1Analytic(std::shared_ptr<GraspMesh> mesh,const Matd& metric,const Mat6d& metricSqrt);
+  virtual scalarD supportPoint(const Vec6d& d,const IDSET& ids,bool directed) override;
+};
+class SupportQInfAnalytic : public Support
+{
+public:
+  SupportQInfAnalytic(std::shared_ptr<GraspMesh> mesh,const Matd& metric,const Mat6d& metricSqrt);
+  virtual scalarD supportPoint(const Vec6d& d,const IDSET& ids,bool directed) override;
 };
 
 PRJ_END

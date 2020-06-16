@@ -85,9 +85,16 @@ scalarD Q1Metric::computeMetric(scalarD* LB,scalarD* UB,const IDSET& ids,bool di
     return ScalarUtil<scalarD>::scalar_max();
   }
   //incremental convex hull computation
-  QHullConvexHull<DIM> hull;
-  //CGALConvexHull<DIM> hull;
+#ifdef CGAL_SUPPORT
+  CGALConvexHull<DIM> hull;
   typename CGALConvexHull<DIM>::PTS pss;
+#elif defined(QHULL_SUPPORT)
+  QHullConvexHull<DIM> hull;
+  typename QHullConvexHull<DIM>::PTS pss;
+#else
+  ConvexHull<DIM> hull;
+  typedef ConvexHull<DIM>::PTS pss;
+#endif
   for(sizeType i=0; i<DIM*2; i++)
     pss.push_back(ConvexHull<DIM>::mul(basis,_wssSols[i]));
   hull.insertInit(pss);
@@ -451,6 +458,7 @@ void QSMMetric::simplifyConstraintRandom(sizeType nrSample,sizeType nrConstraint
 void QSMMetric::debugSolver(sizeType nr,sizeType nrPass)
 {
 #ifdef MOSEK_SUPPORT
+#ifdef SCS_SUPPORT
   DEFINE_NUMERIC_DELTA
   std::shared_ptr<Support> mosek,mosekCut,scs;
   nr=std::min(nr,(sizeType)_mesh->contacts().size());
@@ -481,6 +489,7 @@ void QSMMetric::debugSolver(sizeType nr,sizeType nrPass)
       //}
     }
   }
+#endif
 #endif
   exit(EXIT_SUCCESS);
 }

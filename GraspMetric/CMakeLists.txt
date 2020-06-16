@@ -55,6 +55,7 @@ ENDMACRO(ADD_EXE)
 #GEOMETRY
 ADD_EXE(mainMetric)
 ADD_EXE(mainPyMetric)
+ADD_EXE(mainDebugSupport)
 
 #PYTHON
 SET(ENABLE_PYTHON ON)
