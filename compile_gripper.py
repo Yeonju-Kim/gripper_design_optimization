@@ -6,25 +6,6 @@ import trimesh as tm
 import numpy as np
 import math
 
-def as_mesh(scene_or_mesh):
-    """
-    Convert a possible scene to a mesh.
-
-    If conversion occurs, the returned mesh has only vertex and face data.
-    """
-    if isinstance(scene_or_mesh, tm.Scene):
-        if len(scene_or_mesh.geometry) == 0:
-            mesh = None  # empty scene
-        else:
-            # we lose texture information here
-            mesh = tm.util.concatenate(
-                tuple(tm.Trimesh(vertices=g.vertices, faces=g.faces)
-                    for g in scene_or_mesh.geometry.values()))
-    else:
-        mesh = scene_or_mesh
-        assert(isinstance(mesh, tm.Trimesh))
-    return mesh
-
 def set_simulator_option(root,dt=0.001,withparent=True):
     #<option timestep='0.002' iterations="50" solver="PGS">
     #    <flag energy="enable"/>
@@ -87,36 +68,6 @@ class Link:
     def num_DOF(self):
         return 6 if self.parent is None else 1
 
-    def get_trans(self,x,T0=None):
-        if self.parent is None:
-            DOF=x[self.id:self.id+6]
-            T=tm.transformations.translation_matrix(DOF[0:3])
-            angle=np.linalg.norm(np.array(DOF[3:6]))
-            if angle<Gripper.EPS:
-                DOF[3]=1
-            R=tm.transformations.rotation_matrix(angle=angle,direction=DOF[3:6])
-            T=np.matmul(T,R)
-        else:
-            T=tm.transformations.rotation_matrix(angle=x[self.id]*self.affine,direction=[0,1,0])
-        T=np.matmul(self.trans,T)
-        if T0 is not None:
-            T=np.matmul(T0,T)
-        return T
-
-    def get_mesh(self,x=None,T0=None,scene=None):
-        if x is None:
-            x=[0.0 for i in range(self.total_DOF())]
-        if scene is None:
-            scene=tm.Scene()
-        T=self.get_trans(x,T0)
-        for g in self.geom.geometry.items():
-            gcpy=g[1].copy()
-            gcpy.apply_transform(T)
-            scene.add_geometry(gcpy)
-        for c in self.children:
-            c.get_mesh(x,T,scene)
-        return scene
-
     def get_pos(self):
         return str(self.trans[0,3])+' '+str(self.trans[1,3])+' '+str(self.trans[2,3])
 
@@ -125,6 +76,8 @@ class Link:
         return str(q[0])+' '+str(q[1])+' '+str(q[2])+' '+str(q[3])
 
     def compile_gripper(self,body,asset,actuator,path,damping=1000.0,gear=1,*,name_suffix=''):
+        if not os.path.exists(path):
+            os.mkdir(path)
         b=ET.SubElement(body,'body')
         b.set('pos',self.get_pos())
         b.set('quat',self.get_quat())
@@ -178,22 +131,16 @@ class Link:
                 self.add_geom(b,asset,gi,path,name_suffix)
         else:
             assert isinstance(g,dict)
-            if 'mesh' in g:
-                #asset
-                entity=g['mesh']
+            if 'vertex' in g:
+                verts=g['vertex']
                 nameMesh=g['name']
                 if nameMesh not in Link.WRITTEN_NAMES:
-                    if not os.path.exists(path):
-                        os.mkdir(path)
-                    if not path.endswith('/'):
-                        path+='/'
-                    as_mesh(entity).export(path+nameMesh+name_suffix+'.stl')
                     mesh=ET.SubElement(asset,'mesh')
-                    mesh.set('file',nameMesh+name_suffix+'.stl')
+                    mesh.set('vertex',verts)
                     mesh.set('name',nameMesh)
                     Link.WRITTEN_NAMES.add(nameMesh)
                 #substitute name
-                g={'type':'mesh','mesh':nameMesh,'name':self.name}
+                g={'type':'mesh','mesh':nameMesh,'name':self.name+':'+nameMesh}
             #geom
             geom=ET.SubElement(b,'geom')
             for k,v in g.items():
@@ -250,27 +197,14 @@ class Gripper:
     def __init__(self,*,base_radius=0.5,finger_length=0.3,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
         self.base=Gripper.cylinder_create(base_radius,thick)
         self.base=Gripper.cylinder_transform(self.base,[0,0,-thick/2])
-        self.finger=tm.creation.box([thick,finger_width,finger_length])
-        #subdivide finger
-        for i in range(4):
-            faces=[]
-            for fid,f in enumerate(self.finger.faces):
-                v0=self.finger.vertices[f[0]]
-                v1=self.finger.vertices[f[1]]
-                v2=self.finger.vertices[f[2]]
-                if abs(v0[Gripper.X]-v1[Gripper.X])<Gripper.EPS and abs(v0[Gripper.X]-v2[Gripper.X])<Gripper.EPS:
-                    faces.append(fid)
-                if abs(v0[Gripper.Z]-v1[Gripper.Z])<Gripper.EPS and abs(v0[Gripper.Z]-v2[Gripper.Z])<Gripper.EPS:
-                    faces.append(fid)
-            self.finger=self.finger.subdivide(faces)
         #finger
-        #slice=16
-        #self.finger=[]
-        #for i in range(slice):
-        #    l,r=(-finger_width/2,finger_width/2)
-        #    alpha0,alpha1=(i/slice,(i+1)/slice)
-        #    a,b=(l*(1-alpha0)+r*alpha0,l*(1-alpha1)+r*alpha1)
-        #    self.finger.append(Gripper.box_create([thick,(a,b),finger_length]))
+        slice=16
+        self.finger=[]
+        for i in range(slice):
+            l,r=(-finger_width/2,finger_width/2)
+            alpha0,alpha1=(i/slice,(i+1)/slice)
+            a,b=(l*(1-alpha0)+r*alpha0,l*(1-alpha1)+r*alpha1)
+            self.finger.append(Gripper.box_create([thick,(a,b),finger_length],'fingerSeg%d'%i))
         #hinge
         self.hinge=Gripper.cylinder_create(hinge_rad,hinge_thick)
         self.hinge=Gripper.cylinder_transform(self.hinge,[0,0,-hinge_thick/2])
@@ -302,28 +236,47 @@ class Gripper:
         ret['fromto']='%f %f %f %f %f %f'%tuple(f.tolist()+t.tolist())
         return ret
     
-    def mesh_transform(sg,T):
+    def box_create(ext,name):
+        vssr=[]
+        for d in range(3):
+            if isinstance(ext[d],float) or isinstance(ext[d],int):
+                ext[d]=(-ext[d]/2,ext[d]/2)
+        for id in range(8):
+            vssr.append(ext[0][0] if (id&1)==0 else ext[0][1])
+            vssr.append(ext[1][0] if (id&2)==0 else ext[1][1])
+            vssr.append(ext[2][0] if (id&4)==0 else ext[2][1])
+        vert=''
+        for v in vssr:
+            vert+=str(v)+' '
+            
+        #transform
+        return {'type':'mesh','vertex':vert[0:len(vert)-1],'name':name}
+    
+    def mesh_scale(sg,T):
+        assert 'vertex' in sg
+        vss=[float(val) for val in sg['vertex'].split(' ')]
+        vssr=[]
+        for i in range(len(vss)//3):
+            v=vss[i*3:i*3+3]
+            vssr+=[v[0]*T[0],v[1]*T[1],v[2]*T[2]]
+        vert=''
+        for v in vssr:
+            vert+=str(v)+' '
+            
+        #transform
+        ret=sg.copy()
+        ret['vertex']=vert[0:len(vert)-1]
+        return ret
+    
+    def mesh_vtrans(sg,vtrans):
         if 'mesh' in sg:
-            assert isinstance(sg['mesh'],tm.Scene) or isinstance(sg['mesh'],tm.Trimesh)
-            ret=sg.copy()
-            if isinstance(T,list):
-                ret['mesh'].apply_translation(T)
-            else: ret['mesh'].apply_transform(T)
-            return ret
+            raise RuntimeError('mesh_vtrans not supported for Trimesh!')
         else:
             assert 'vertex' in sg
-            vss=[float(val) for val in ret['vertex'].split(' ')]
+            vss=[float(val) for val in sg['vertex'].split(' ')]
             vssr=[]
             for i in range(len(vss)//3):
-                v=vss[i*3:i*3+3]
-                if not isinstance(T,np.ndarray):
-                    T=np.array(T)
-                if T.shape==(3,4) or T.shape==(4,4):
-                    v=T[0:3,0:3].dot(v)+T[0:3,3]
-                else:
-                    assert T.shape==(3,)
-                    v+=T
-                vssr+=v.tolist()
+                vssr+=vtrans(vss[i*3:i*3+3])
             vert=''
             for v in vssr:
                 vert+=str(v)+' '
@@ -333,6 +286,29 @@ class Gripper:
             ret['vertex']=vert[0:len(vert)-1]
             return ret
     
+    def mesh_transform(sg,T):
+        assert 'vertex' in sg
+        vss=[float(val) for val in sg['vertex'].split(' ')]
+        vssr=[]
+        for i in range(len(vss)//3):
+            v=vss[i*3:i*3+3]
+            if not isinstance(T,np.ndarray):
+                T=np.array(T)
+            if T.shape==(3,4) or T.shape==(4,4):
+                v=T[0:3,0:3].dot(v)+T[0:3,3]
+            else:
+                assert T.shape==(3,)
+                v+=T
+            vssr+=v.tolist()
+        vert=''
+        for v in vssr:
+            vert+=str(v)+' '
+            
+        #transform
+        ret=sg.copy()
+        ret['vertex']=vert[0:len(vert)-1]
+        return ret  
+          
     def scene_transform(s,T):
         ret=[]
         for sg in s:
@@ -345,10 +321,22 @@ class Gripper:
         return ret
        
     def finger_width(self):
-        return self.finger.bounds[1][Gripper.Y]-self.finger.bounds[0][Gripper.Y]
+        l,r=(100.,-100.)
+        for f in self.finger:
+            vss=[float(val) for val in f['vertex'].split(' ')]
+            for i in range(len(vss)//3):
+                val=vss[i*3+Gripper.Y]
+                l,r=(min(l,val),max(r,val))
+        return r-l
     
     def finger_length(self):
-        return self.finger.bounds[1][Gripper.Z]-self.finger.bounds[0][Gripper.Z]
+        l,r=(100.,-100.)
+        for f in self.finger:
+            vss=[float(val) for val in f['vertex'].split(' ')]
+            for i in range(len(vss)//3):
+                val=vss[i*3+Gripper.Z]
+                l,r=(min(l,val),max(r,val))
+        return r-l
             
     def hinge_radius(self):
         return self.hinge['size']*1.1
@@ -378,12 +366,12 @@ class Gripper:
         if finger_curvature is None:
             finger_curvature=0
         
-        finger=self.finger.copy().apply_scale([1,scaleY,scaleZ])
-        for v in finger.vertices:
+        finger=[Gripper.mesh_scale(f.copy(),[1,scaleY,scaleZ]) for f in self.finger]
+        def vtrans(v):
             if v[Gripper.Y]>-finger_width/2+Gripper.EPS and v[Gripper.Y]<finger_width/2-Gripper.EPS:
                 v[Gripper.X]+=finger_curvature*(finger_width*finger_width/4-v[Gripper.Y]*v[Gripper.Y])
-        finger.update_vertices([True for i in range(len(finger.vertices))])
-        scene=[{'type':'mesh','mesh':finger,'name':'finger'}]
+            return v
+        scene=[Gripper.mesh_vtrans(f.copy(),vtrans) for f in finger]
         
         if top_hinge:
             scene.append(Gripper.cylinder_transform(self.hinge,[0,( finger_width-self.hinge_thick())/2,finger_length/2+self.hinge_radius()]))
@@ -446,7 +434,7 @@ if __name__=='__main__':
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
     actuator=ET.SubElement(root,'actuator')
-    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
+    link=gripper.get_robot(base_off=0.2,finger_width=0.5,finger_length=0.5,finger_curvature=3.)
     link.compile_gripper(body,asset,actuator,path)
     
     open(path+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
@@ -456,7 +444,7 @@ if __name__=='__main__':
     viewer=mjc.MjViewer(sim)
     
     state=sim.get_state()
-    link.set_PD_target([0.0 for i in range(6)]+[0.5,-0.2])
+    link.set_PD_target([0.0 for i in range(6)]+[0.5,-0.1])
     while True:
         state=sim.get_state()
         link.define_ctrl(sim,state.qpos,state.qvel)
