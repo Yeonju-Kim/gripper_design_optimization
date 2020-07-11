@@ -173,7 +173,7 @@ class World:
             vid1=vid0+model.mesh_vertnum[mid]
             for vid in range(vid0,vid1):
                 minZ=min(model.mesh_vert[vid][2],minZ)
-        return minZ-0.1
+        return minZ-0.2
         
     def get_sim_info(self):
         if self.names is not None:

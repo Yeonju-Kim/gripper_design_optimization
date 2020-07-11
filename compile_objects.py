@@ -225,7 +225,9 @@ def surrogate_object_04(name):
    
 def surrogate_object_05(name):
     ret=[]
-    ret.append(prism_create(f=(0,0,-0.422),t=(0,0,0.199),dss=[(0.,0.11),(0.9,0.2),(1.,0.2)],name=name+'Body0'))
+    t=0.02
+    ret.append(hollow_prism_create(vss=[(0.11,0,-0.422),(0.11-t,0,-0.422),(0.2,0,0.199),(0.2-t,0,0.199)],axis=(0,0,1),name=name+'Body0'))
+    ret.append(cylinder_create(rad=0.11,fromto=[0,0,-0.422,0,0,-0.422+t],name=name+'Base0'))
     ret.append(cylinder_create(rad=0.21,fromto=[0,0,0.17,0,0,0.199],name=name+'Cap0'))
     return ret
 

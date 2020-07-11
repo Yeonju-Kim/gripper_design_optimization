@@ -7,7 +7,9 @@ import numpy as np
 import math
 
 class Controller:
-    def __init__(self,world,*,approach_vel=0.2,thres_vel=1e-1,lift_vel=1.0,lift_height=1.5,shake_vel=[0.4,0,0],shake_times=10):
+    def __init__(self,world,*,approach_vel=0.2,thres_vel=1e-1,  \
+                 lift_vel=1.0,lift_height=1.5, \
+                 shake_range=[0.4,0,0],shake_vel=15.0,shake_times=10):
         self.world=world
         self.sim=self.world.sim
         if self.world.link is None:
@@ -22,19 +24,29 @@ class Controller:
         self.lift_vel=lift_vel
         self.lift_height=lift_height
         #shake
+        self.shake_range=shake_range
         self.shake_vel=shake_vel
         self.shake_times=shake_times
         #object id
-        self.link_ids=[]
-        self.get_link_ids(self.link)
+        self.link_geom_ids,self.leaf_link_geom_ids=self.get_link_ids(self.link)
         self.floor_id=self.sim.model.geom_names.index('floor')
     
     def get_link_ids(self,link):
-        for idn,n in enumerate(self.sim.model.geom_names):
-            if n.startswith(link.name):
-                self.link_ids.append(idn)
+        model=self.sim.model
+        bid=model.body_names.index(link.name)
+        geom_adr=model.body_geomadr[bid]
+        geom_num=model.body_geomnum[bid]
+        
+        link_geom_ids=[range(geom_adr,geom_adr+geom_num)]
+        if len(link.children)==0:
+            leaf_link_geom_ids=link_geom_ids
+        else: leaf_link_geom_ids=[]
+        
         for c in link.children:
-            self.get_link_ids(c)
+            link,leaf=self.get_link_ids(c)
+            link_geom_ids+=link
+            leaf_link_geom_ids+=leaf
+        return link_geom_ids,leaf_link_geom_ids
     
     def reset(self,id,initial_pos,axial_rotation):
         #we assume the gripper is always approaching from initial_pos to [0,0,0]
@@ -74,11 +86,13 @@ class Controller:
         self.contact_normals=[]
         for ic in range(self.sim.data.ncon):
             c=self.sim.data.contact[ic]
-            if c.geom1 in self.link_ids and c.geom2 not in self.link_ids:
+            g1clink=any([c.geom1 in rng for rng in self.link_geom_ids])
+            g2clink=any([c.geom2 in rng for rng in self.link_geom_ids])
+            if g1clink and not g2clink:
                 if c.geom2 in self.world.target_geom_ids:
                     self.contact_poses.append([cp-op for cp,op in zip(c.pos,objpos)])
                     self.contact_normals.append(c.frame[0:3].tolist())
-            elif c.geom1 not in self.link_ids and c.geom2 in self.link_ids:
+            elif not g1clink and g2clink:
                 if c.geom1 in self.world.target_geom_ids:
                     self.contact_poses.append([cp-op for cp,op in zip(c.pos,objpos)])
                     #to compute Q_* metric, we assume normals are point inward i.e. n*p<0
@@ -87,17 +101,23 @@ class Controller:
     def contact_state(self):
         floor_contact=False
         obj_contact=False
+        gcleaf=[False for l in self.leaf_link_geom_ids]
         for ic in range(self.sim.data.ncon):
             c=self.sim.data.contact[ic]
-            if c.geom1 in self.link_ids and c.geom2 not in self.link_ids:
+            g1clink=any([c.geom1 in rng for rng in self.link_geom_ids])
+            g2clink=any([c.geom2 in rng for rng in self.link_geom_ids])
+            if g1clink and not g2clink:
                 if c.geom2==self.floor_id:
                     floor_contact=True
                 else: obj_contact=True
-            elif c.geom1 not in self.link_ids and c.geom2 in self.link_ids:
+            elif not g1clink and g2clink:
                 if c.geom1==self.floor_id:
                     floor_contact=True
                 else: obj_contact=True
-        return floor_contact,obj_contact
+            for leafid in range(len(self.leaf_link_geom_ids)):
+                gcleaf[leafid]=gcleaf[leafid] or (c.geom1 in self.leaf_link_geom_ids[leafid])
+                gcleaf[leafid]=gcleaf[leafid] or (c.geom2 in self.leaf_link_geom_ids[leafid])
+        return floor_contact,obj_contact,all(gcleaf)
     
     def approach(self):
         state=self.sim.get_state()
@@ -110,7 +130,7 @@ class Controller:
         
         #return succeed or failed
         self.sim.step()
-        fc,oc=self.contact_state()
+        fc,oc,_=self.contact_state()
         if fc:  #if floor contact, immediately return false
             return False
         if oc:
@@ -131,12 +151,12 @@ class Controller:
         #return succeed or failed (actually close will always succeed)
         self.sim.step()
         self.elapsed+=1
-        fc,_=self.contact_state()
+        fc,_,lc=self.contact_state()
         if fc:  #if floor contact, immediately return false
             return False
         state=self.sim.get_state()
         maxVel=max([abs(q) for q in self.link.fetch_q(state.qvel)])
-        if maxVel<self.thres_vel:  #we assume closed when the velocity is small enough
+        if maxVel<self.thres_vel or lc:  #we assume closed when the velocity is small enough
             self.x_closed=self.link.fetch_q(state.qpos)
             self.record_contacts()  #this will be used to compute Q_* metric later
             self.closed=True
@@ -154,7 +174,7 @@ class Controller:
         
         self.sim.step()
         self.elapsed+=1
-        fc,oc=self.contact_state()
+        fc,oc,_=self.contact_state()
         if fc:# or not oc:  #if floor contact or no object contact, immediately return false
             return False
         
@@ -173,29 +193,29 @@ class Controller:
         sgn=1 if self.shake_count%2==0 else -1
         state=self.sim.get_state()
         pos=np.array([state.qpos[self.link.joint_ids[d]] for d in range(3)])
-        svel=np.array(self.shake_vel)
-        len=np.linalg.norm(svel)
-        svel*=1/len
+        srng=np.array(self.shake_range)
+        len=np.linalg.norm(srng)
+        srng*=1/len
         
         x=self.x_lifted[0:8]
-        pos0=np.array(x[0:3])-np.array(x[0:3]).dot(svel)*svel
-        pos0+=svel*(pos.dot(svel)+len*sgn)
+        pos0=np.array(x[0:3])-np.array(x[0:3]).dot(srng)*srng
+        pos0+=srng*(pos.dot(srng)+len*sgn)
         x[0:3]=pos0.tolist()
         
         vx=[0 for i in range(6)]+[-self.lift_vel,-self.lift_vel]
-        vx[0:3]=[v*sgn for v in self.shake_vel]
+        vx[0:3]=[v*sgn*self.shake_vel for v in srng]
         self.link.set_PD_target(x,vx)
         self.link.define_ctrl(self.sim,state.qpos,state.qvel)
     
         self.sim.step()
         self.elapsed+=1
-        fc,oc=self.contact_state()
+        fc,oc,_=self.contact_state()
         if fc or not oc:  #if floor contact or no object contact, immediately return false
             return False
         
         #return succeed or failed based on whether gripper is still in contact with object
         state=self.sim.get_state()
-        off=(np.array(pos[0:3])-np.array(x[0:3])).dot(svel)
+        off=(np.array(pos[0:3])-np.array(x[0:3])).dot(srng)
         if abs(off)>len:
             self.shake_count+=1
             if self.shake_count>=self.shake_times:
@@ -257,7 +277,7 @@ if __name__=='__main__':
     
     id=0
     while True:
-        controller.reset(id,[0.1,0.,3.],-0.1)
+        controller.reset(id,[0.1,0.,2.],-0.1)
         while not controller.step():
             viewer.render()
         id=(id+1)%len(controller.world.names)
