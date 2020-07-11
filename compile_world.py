@@ -173,6 +173,8 @@ class World:
             vid1=vid0+model.mesh_vertnum[mid]
             for vid in range(vid0,vid1):
                 minZ=min(model.mesh_vert[vid][2],minZ)
+        if minZ>=10000.0:
+            minZ=0.
         return minZ-0.2
         
     def get_sim_info(self):
@@ -229,27 +231,14 @@ if __name__=='__main__':
     link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=-2.)
 
     #create world 
-    world=World()  
-    use_surrogate=True
-    if use_surrogate:
-        objs=[surrogate_object_01('01'),    \
-              surrogate_object_02('02'),    \
-              surrogate_object_03('03'),    \
-              surrogate_object_04('04'),    \
-              surrogate_object_05('05'),    \
-              surrogate_object_06('06'),    \
-              surrogate_object_07('07'),    \
-              surrogate_object_08('08'),    \
-              surrogate_object_09('09'),    \
-              surrogate_object_10('10')]
-    else:
-        auto_download()
-        objs=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
-    world.compile_simulator(objects=objs,link=link)
+    world=World()
+    from dataset_cup import get_dataset_cup
+    from dataset_canonical import get_dataset_canonical
+    world.compile_simulator(objects=get_dataset_canonical(),link=None)#link)
     
     #create viewer
     viewer=mjc.MjViewer(world.sim)
-    world.test_object(1)
+    world.test_object(0)
     while True:
         world.sim.step()
         viewer.render()

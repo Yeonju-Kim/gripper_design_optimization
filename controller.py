@@ -7,7 +7,7 @@ import numpy as np
 import math
 
 class Controller:
-    def __init__(self,world,*,approach_vel=0.2,thres_vel=1e-1,  \
+    def __init__(self,world,*,approach_vel=0.5,thres_vel=1e-1,  \
                  lift_vel=1.0,lift_height=1.5, \
                  shake_range=[0.4,0,0],shake_vel=15.0,shake_times=10):
         self.world=world
@@ -254,22 +254,9 @@ if __name__=='__main__':
 
     #create world    
     world=World()
-    use_surrogate=True
-    if use_surrogate:
-        objs=[surrogate_object_01('01'),    \
-              surrogate_object_02('02'),    \
-              surrogate_object_03('03'),    \
-              surrogate_object_04('04'),    \
-              surrogate_object_05('05'),    \
-              surrogate_object_06('06'),    \
-              surrogate_object_07('07'),    \
-              surrogate_object_08('08'),    \
-              surrogate_object_09('09'),    \
-              surrogate_object_10('10')]
-    else:
-        auto_download()
-        objs=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
-    world.compile_simulator(objects=objs,link=link)
+    from dataset_cup import get_dataset_cup
+    from dataset_canonical import get_dataset_canonical
+    world.compile_simulator(objects=get_dataset_canonical(),link=link)
     viewer=mjc.MjViewer(world.sim)
     
     #create controller
@@ -277,7 +264,7 @@ if __name__=='__main__':
     
     id=0
     while True:
-        controller.reset(id,[0.1,0.,2.],-0.1)
+        controller.reset(id,[0.1,0.,3.],-0.1)
         while not controller.step():
             viewer.render()
         id=(id+1)%len(controller.world.names)

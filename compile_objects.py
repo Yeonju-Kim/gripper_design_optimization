@@ -47,7 +47,7 @@ def get_COM(obj):
     mesh=tm.exchange.load.load(obj)
     return mesh.center_mass,mesh.bounds
 
-def compile_body(name,b,asset,g,DUMMY_NAMES=set(),force=False,material=None):
+def compile_body(name,b,asset,g,DUMMY_NAMES=set(),force=False,material=None,collision=True):
     b.set('name',name)
     if isinstance(g,str):
         g=ensure_stl(g,force)
@@ -55,10 +55,10 @@ def compile_body(name,b,asset,g,DUMMY_NAMES=set(),force=False,material=None):
         mesh=ET.SubElement(asset,'mesh')
         mesh.set('file',os.path.abspath(g))
         mesh.set('name',gname)
-        compile_body(name,b,asset,{'type':'mesh','mesh':gname,'name':name})
+        compile_body(name,b,asset,{'type':'mesh','mesh':gname,'name':name},DUMMY_NAMES=DUMMY_NAMES,force=force,material=material,collision=collision)
     elif isinstance(g,list):
         for gi in g:
-            DUMMY_NAMES=compile_body(name,b,asset,gi,DUMMY_NAMES=DUMMY_NAMES,force=force,material=material)
+            DUMMY_NAMES=compile_body(name,b,asset,gi,DUMMY_NAMES=DUMMY_NAMES,force=force,material=material,collision=collision)
         return DUMMY_NAMES
     else:
         assert isinstance(g,dict)
@@ -79,8 +79,104 @@ def compile_body(name,b,asset,g,DUMMY_NAMES=set(),force=False,material=None):
             DUMMY_NAMES.add(len(DUMMY_NAMES))
         if material is not None:
             geom.set('material',material)
+        if not collision:
+            geom.set('contype','0')
+            geom.set('conaffinity','0')
         return DUMMY_NAMES
 
+def prim_transform(c,T):
+    ret=c.copy()
+    ft=[float(val) for val in ret['fromto'].split(' ')]
+    if not isinstance(T,np.ndarray):
+        T=np.array(T)
+    if T.shape==(3,4) or T.shape==(4,4):
+        f=T[0:3,0:3].dot(ft[0:3])+T[0:3,3]
+        t=T[0:3,0:3].dot(ft[3:6])+T[0:3,3]
+    else:
+        assert T.shape==(3,)
+        f=ft[0:3]+T
+        t=ft[3:6]+T
+    ret['fromto']='%f %f %f %f %f %f'%tuple(f.tolist()+t.tolist())
+    return ret
+    
+def mesh_transform(sg,T):
+    assert 'vertex' in sg
+    vss=[float(val) for val in sg['vertex'].split(' ')]
+    vssr=[]
+    for i in range(len(vss)//3):
+        v=vss[i*3:i*3+3]
+        if not isinstance(T,np.ndarray):
+            T=np.array(T)
+        if T.shape==(3,4) or T.shape==(4,4):
+            v=T[0:3,0:3].dot(v)+T[0:3,3]
+        else:
+            assert T.shape==(3,)
+            v+=T
+        vssr+=v.tolist()
+    vert=''
+    for v in vssr:
+        vert+=str(v)+' '
+        
+    #transform
+    ret=sg.copy()
+    ret['vertex']=vert[0:len(vert)-1]
+    return ret  
+    
+def geom_transform(obj,T):
+    if 'fromto' in obj:
+        return prim_transform(obj,T)
+    else: 
+        assert 'vertex' in obj
+        return mesh_transform(obj,T)
+
+def scene_transform(s,T):
+    ret=[]
+    for sg in s:
+        ret.append(geom_transform(sg,T))
+    return ret
+
+def prim_scale_xy(c,scaleXY):
+    ret=dict()
+    for k,v in c.items():
+        if k=='radius' or k=='size':
+            ret[k]=v*scaleXY
+        else: ret[k]=v
+    return ret
+      
+def prim_scale(c,T):
+    ret=prim_transform(c,tm.transformations.scale_matrix(T[0]))
+    ret=prim_scale_xy(ret,T[0])
+    return ret
+      
+def mesh_scale(sg,T):
+    assert 'vertex' in sg
+    vss=[float(val) for val in sg['vertex'].split(' ')]
+    vssr=[]
+    for i in range(len(vss)//3):
+        v=vss[i*3:i*3+3]
+        vssr+=[v[0]*T[0],v[1]*T[1],v[2]*T[2]]
+    vert=''
+    for v in vssr:
+        vert+=str(v)+' '
+        
+    #transform
+    ret=sg.copy()
+    ret['vertex']=vert[0:len(vert)-1]
+    return ret
+   
+def geom_scale(obj,T):
+    if 'fromto' in obj:
+        return prim_scale(obj,T)
+    else: 
+        assert 'vertex' in obj
+        return mesh_scale(obj,T)
+       
+def scene_scale(s,T):
+    ret=[]
+    for sg in s:
+        ret.append(geom_scale(sg,T))
+    return ret
+               
 def hollow_prism_create(vss,axis,slice=32,name=None):
     ret=[]
     for i in range(slice):
@@ -136,8 +232,8 @@ def prism_create(f,t,dss,slice=32,name=None,x0=None):
         ret['name']=name
     return ret
     
-def cone_create(f,t,rf,rt,slice=32,name=None):
-    return prism_create(f,t,[(0.,rf),(1.,rt)],slice,name)
+def cone_create(f,t,rf,rt,slice=32,name=None,x0=None):
+    return prism_create(f,t,[(0.,rf),(1.,rt)],slice,name,x0=x0)
 
 def box_create(ext,name=None):
     vssr=[]
@@ -178,147 +274,3 @@ def capsule_create(rad,height=None,fromto=None,name=None):
         ret['name']=name
     return ret
   
-def surrogate_object_01(name):
-    ret=[]
-    t=0.02
-    rad=0.025
-    ret.append(cone_create(f=[0,0,-0.312],t=[0,0,-0.29],rf=0.2,rt=0.221,name=name+'Base0'))
-    ret.append(hollow_prism_create(vss=[(0.221-t,0,-0.29),(0.221,0,-0.29),(0.221-t,0,0.313),(0.221,0,0.312)],axis=(0,0,1),name=name+'Body0'))
-    sliceY=6
-    for i in range(sliceY):
-        phi0=-math.pi/2+math.pi*i/sliceY
-        pt0=(0.221+0.16*math.cos(phi0),0,0.16*math.sin(phi0)+0.01)
-        phi1=-math.pi/2+math.pi*(i+1)/sliceY
-        pt1=(0.221+0.16*math.cos(phi1),0,0.16*math.sin(phi1)+0.01)
-        ret.append(capsule_create(rad,fromto=list(pt0)+list(pt1),name=name+'HandleSeg'+str(i)))
-    return ret
-  
-def surrogate_object_02(name):
-    ret=[]
-    ret.append(cone_create(f=[0,0,-0.204],t=[0,0,-0.16],rf=0.16,rt=0.21,name=name+'Base0'))
-    ret.append(hollow_prism_create(vss=[(0.13,0,-0.16),(0.21,0,-0.16),(0.22,0,-0.05),(0.26,0,-0.05)],axis=(0,0,1),name=name+'Body0'))
-    ret.append(hollow_prism_create(vss=[(0.22,0,-0.05),(0.26,0,-0.05),(0.265,0,0.204),(0.29,0,0.204)],axis=(0,0,1),name=name+'Body1'))
-    ret.append(capsule_create(rad=0.025,fromto=[0.28,0,0.14,0.37,0,0.11],name=name+'Handle0'))
-    ret.append(capsule_create(rad=0.025,fromto=[0.37,0,0.11,0.4,0,0.04],name=name+'Handle1'))
-    ret.append(capsule_create(rad=0.025,fromto=[0.4,0,0.04,0.37,0,-0.05],name=name+'Handle2'))
-    ret.append(capsule_create(rad=0.025,fromto=[0.37,0,-0.05,0.24,0,-0.1],name=name+'Handle3'))
-    return ret
-  
-def surrogate_object_03(name):
-    ret=[]
-    t=0.02
-    ret.append(box_create([(-0.245  ,-0.245+t),(-0.245  , 0.245  ),(-0.276  , 0.276   )],name=name+'Left'))
-    ret.append(box_create([( 0.245-t, 0.245  ),(-0.245  , 0.245  ),(-0.276  , 0.276   )],name=name+'Right'))
-    ret.append(box_create([(-0.245  , 0.245  ),(-0.245  ,-0.245+t),(-0.276  , 0.276   )],name=name+'Front'))
-    ret.append(box_create([(-0.245  , 0.245  ),( 0.245-t, 0.245  ),(-0.276  , 0.276   )],name=name+'Back'))
-    ret.append(box_create([(-0.245  , 0.245  ),(-0.245  , 0.245  ),(-0.276  ,-0.276+t)],name=name+'Base0'))
-    ret.append(box_create([( 0.245  , 0.425  ),(-0.03   , 0.03   ),( 0.220-t, 0.220  )],name=name+'Handle1'))
-    ret.append(box_create([( 0.425-t, 0.425  ),(-0.03   , 0.03   ),(-0.160  , 0.220  )],name=name+'Handle2'))
-    ret.append(box_create([( 0.245  , 0.425  ),(-0.03   , 0.03   ),(-0.160  ,-0.160+t)],name=name+'Handle3'))
-    return ret
-   
-def surrogate_object_04(name):
-    ret=[]
-    ret.append(cylinder_create(rad=0.27,fromto=[0,0,-0.238,0,0,-0.23],name=name+'Base0'))
-    ret.append(hollow_prism_create(vss=[(0.31,0,0),(0.245,0,0),(0.26,0,0.238),(0.28,0,0.238),(0.26,0,-0.238),(0.28,0,-0.238)],axis=(0,0,1),name=name+'Body0'))
-    return ret
-   
-def surrogate_object_05(name):
-    ret=[]
-    t=0.02
-    ret.append(hollow_prism_create(vss=[(0.11,0,-0.422),(0.11-t,0,-0.422),(0.2,0,0.199),(0.2-t,0,0.199)],axis=(0,0,1),name=name+'Body0'))
-    ret.append(cylinder_create(rad=0.11,fromto=[0,0,-0.422,0,0,-0.422+t],name=name+'Base0'))
-    ret.append(cylinder_create(rad=0.21,fromto=[0,0,0.17,0,0,0.199],name=name+'Cap0'))
-    return ret
-
-def surrogate_object_06(name):
-    ret=[]
-    t=0.02
-    r=0.25
-    ret.append(prism_create(f=(0,0,-0.353),t=(0,0,-0.353+t),dss=[(0.,r),(1.,r)],name=name+'Base0',slice=6,x0=[1,0,0]))
-    ret+=hollow_prism_create(vss=[(r-t,0,-0.353+t),(r,0,-0.353+t),(r-t,0,0.353),(r,0,0.353)],axis=(0,0,1),name=name+'Body0',slice=6)
-    return ret
-
-def surrogate_object_07(name):
-    ret=[]
-    ret.append(cylinder_create(rad=0.188,fromto=[0,0,-0.375,0,0,-0.328],name=name+'Base0'))
-    ret.append(cone_create(f=[0,0,-0.328],t=[0,0,-0.25],rf=0.1,rt=0.,name=name+'Base1'))
-    ret.append(cylinder_create(rad=0.05,fromto=[0,0,-0.328,0,0,-0.13],name=name+'Base2'))
-    ret.append(cone_create(f=[0,0,-0.14],t=[0,0,-0.115],rf=0.07,rt=0.105,name=name+'Base3'))
-    ret+=hollow_prism_create(vss=[(0.08,0,-0.115),(0.105,0,-0.115),(0.209,0,0.375),(0.234,0,0.375)],axis=[0,0,1],name=name+'Body0')
-    return ret
-
-def surrogate_object_08(name):
-    ret=[]
-    t=0.01
-    t2=0.005
-    ret.append(prism_create(f=(0,0,-0.47),t=(0,0,-0.4),dss=[(0.,0.095),(0.2,0.096),(1.,0.)],name=name+'Base0'))
-    ret.append(cylinder_create(rad=0.013,fromto=[0,0,-0.46,0,0,-0.01],name=name+'Base1'))
-    ret.append(prism_create(f=(0,0,-0.01),t=(0,0,0.25),dss=[(0.,0.03),(0.5,0.062),(1.,0.06)],name=name+'Body0'))
-    ret.append(hollow_prism_create(vss=[(0.06-t,0,0.25),(0.06,0,0.25),(0.07-t,0,0.35),(0.07,0,0.35)],axis=(0,0,1),name=name+'Body1'))
-    ret.append(hollow_prism_create(vss=[(0.07-t,0,0.35),(0.07,0,0.35),(0.12-t2,0,0.47),(0.12,0,0.47)],axis=(0,0,1),name=name+'Body2'))
-    return ret
-
-def surrogate_object_09(name):
-    ret=[]
-    ret.append(prism_create(f=(0,0,-0.443),t=(0,0,-0.415),dss=[(0.,0.145),(0.3,0.145),(1.,0.)],name=name+'Base0'))
-    ret.append(cone_create(f=(0,0,-0.435),t=(0,0,0.1),rf=0.02,rt=0,name=name+'Base1'))
-    ret.append(cone_create(f=(0,0,-0.435),t=(0,0,0.1),rf=0.0,rt=0.02,name=name+'Base2'))
-    ret.append(cone_create(f=(0,0,0.1),t=(0,0,0.14),rf=0.02,rt=0.07,name=name+'Base3'))
-    ret.append(hollow_prism_create(vss=[(0.04,0,0.14),(0.07,0,0.14),(0.125,0,0.25),(0.145,0,0.25)],axis=(0,0,1),name=name+'Body0'))
-    ret.append(hollow_prism_create(vss=[(0.125,0,0.25),(0.145,0,0.25),(0.147,0,0.35),(0.164,0,0.35)],axis=(0,0,1),name=name+'Body1'))
-    ret.append(hollow_prism_create(vss=[(0.147,0,0.35),(0.164,0,0.35),(0.137,0,0.443),(0.152,0,0.443)],axis=(0,0,1),name=name+'Body2'))
-    return ret
-
-def surrogate_object_10(name):
-    ret=[]
-    t=0.02
-    ret.append(prism_create(f=(0,0,-0.274),t=(0,0,-0.225),dss=[(0.,0.13),(0.2,0.122),(1.,0.)],name=name+'Base0'))
-    ret.append(cylinder_create(rad=0.028,fromto=[0,0,-0.274,0,0,0.045],name=name+'Base1'))
-    ret.append(hollow_prism_create(vss=[(0.028,0,0.045-t),(0.028,0,0.045),(0.122,0,0.072-t),(0.122,0,0.072)],axis=(0,0,1),name=name+'Body0'))
-    ret.append(hollow_prism_create(vss=[(0.122,0,0.072-t),(0.122,0,0.072),(0.24-t,0,0.15),(0.24,0,0.15)],axis=(0,0,1),name=name+'Body1'))
-    ret.append(hollow_prism_create(vss=[(0.24-t,0,0.15),(0.24,0,0.15),(0.296-t,0,0.274),(0.296,0,0.274)],axis=(0,0,1),name=name+'Body2'))
-    return ret
-
-def compare_debug(id,sur,move_x):
-    path='data/'
-    root=ET.Element('mujoco')
-    set_simulator_option(root)
-    asset=ET.SubElement(root,'asset')
-    body=ET.SubElement(root,'worldbody')
-    object_list=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
-    
-    b=ET.SubElement(body,'body')
-    compile_body('Real',b,asset,object_list[id])
-    print('Comparing for %s!'%object_list[id])
-    
-    b=ET.SubElement(body,'body')
-    compile_body('Surrogate',b,asset,sur('Surrogate'))
-    joint=ET.SubElement(b,'joint')
-    joint.set('axis','1 0 0')
-    joint.set('type','slide')
-    
-    open(path+'/compare.xml','w').write(ET.tostring(root,pretty_print=True).decode())
-    model=mjc.load_model_from_path(path+'/compare.xml')
-    sim=mjc.MjSim(model)
-    viewer=mjc.MjViewer(sim)
-    
-    state=sim.get_state()
-    state.qpos[0]=move_x
-    sim.set_state(state)
-    while True:
-        sim.step()
-        viewer.render()
-
-if __name__=='__main__':
-    auto_download()
-    compare_debug(0,surrogate_object_05,1.)
-    #compare_debug(1,surrogate_object_03,1.)
-    #compare_debug(2,surrogate_object_07,1.)
-    #compare_debug(3,surrogate_object_10,1.)
-    #compare_debug(4,surrogate_object_02,1.)
-    #compare_debug(5,surrogate_object_08,1.)
-    #compare_debug(6,surrogate_object_04,1.)
-    #compare_debug(7,surrogate_object_01,1.)
-    #compare_debug(8,surrogate_object_09,1.)
-    #compare_debug(9,surrogate_object_06,1.)
