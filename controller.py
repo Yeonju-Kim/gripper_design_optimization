@@ -98,7 +98,7 @@ class Controller:
                     #to compute Q_* metric, we assume normals are point inward i.e. n*p<0
                     self.contact_normals.append([-n for n in c.frame[0:3].tolist()])
     
-    def contact_state(self):
+    def link_contact_state(self):
         floor_contact=False
         obj_contact=False
         gcleaf=[False for l in self.leaf_link_geom_ids]
@@ -119,6 +119,17 @@ class Controller:
                 gcleaf[leafid]=gcleaf[leafid] or (c.geom2 in self.leaf_link_geom_ids[leafid])
         return floor_contact,obj_contact,all(gcleaf)
     
+    def object_contact_state(self):
+        for ic in range(self.sim.data.ncon):
+            c=self.sim.data.contact[ic]
+            g1cobject=c.geom1 in self.world.target_geom_ids
+            if g1cobject and c.geom2==self.floor_id:
+                return True
+            g2cobject=c.geom2 in self.world.target_geom_ids
+            if g2cobject and c.geom1==self.floor_id:
+                return True
+        return False
+    
     def approach(self):
         state=self.sim.get_state()
         pos=np.array([state.qpos[self.link.joint_ids[d]] for d in range(3)])
@@ -130,7 +141,7 @@ class Controller:
         
         #return succeed or failed
         self.sim.step()
-        fc,oc,_=self.contact_state()
+        fc,oc,_=self.link_contact_state()
         if fc:  #if floor contact, immediately return false
             return False
         if oc:
@@ -151,7 +162,7 @@ class Controller:
         #return succeed or failed (actually close will always succeed)
         self.sim.step()
         self.elapsed+=1
-        fc,_,lc=self.contact_state()
+        fc,_,lc=self.link_contact_state()
         if fc:  #if floor contact, immediately return false
             return False
         state=self.sim.get_state()
@@ -174,14 +185,11 @@ class Controller:
         
         self.sim.step()
         self.elapsed+=1
-        fc,oc,_=self.contact_state()
-        if fc:# or not oc:  #if floor contact or no object contact, immediately return false
-            return False
         
         #return succeed or failed based on whether gripper is still in contact with object
         state=self.sim.get_state()
         if height>self.lift_height:
-            if oc:
+            if not self.object_contact_state():
                 self.x_lifted=self.link.fetch_q(state.qpos)
                 self.lifted=True
                 return True
@@ -209,8 +217,7 @@ class Controller:
     
         self.sim.step()
         self.elapsed+=1
-        fc,oc,_=self.contact_state()
-        if fc or not oc:  #if floor contact or no object contact, immediately return false
+        if self.object_contact_state():  #if floor contacts object
             return False
         
         #return succeed or failed based on whether gripper is still in contact with object
@@ -219,12 +226,9 @@ class Controller:
         if abs(off)>len:
             self.shake_count+=1
             if self.shake_count>=self.shake_times:
-                if oc:
-                    self.x_shaked=self.link.fetch_q(state.qpos)
-                    self.shaked=True
-                    return True
-                else:
-                    return False
+                self.x_shaked=self.link.fetch_q(state.qpos)
+                self.shaked=True
+                return True
         return True
     
     def step(self,will_close=True,will_lift=True,will_shake=True):
@@ -249,8 +253,8 @@ class Controller:
     
 if __name__=='__main__':
     #create gripper
-    gripper=Gripper()
-    link=gripper.get_robot(base_off=0.2,finger_length=0.15,finger_width=0.2,finger_curvature=4.)
+    gripper=Gripper(hinge_rad=0.05)
+    link=gripper.get_robot(base_off=0.2,finger_length=0.15,finger_width=0.2,finger_curvature=4.,num_finger=2)
 
     #create world    
     world=World()
@@ -264,7 +268,7 @@ if __name__=='__main__':
     
     id=0
     while True:
-        controller.reset(id,[0.1,0.,3.],-0.1)
+        controller.reset(id,[0.1,0.,3.],math.pi/2)
         while not controller.step():
             viewer.render()
         id=(id+1)%len(controller.world.names)
