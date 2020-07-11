@@ -399,10 +399,8 @@ class Gripper:
         return root
         
 if __name__=='__main__':
-    auto_download()
-    
     gripper=Gripper()
-    path='data/gripper'
+    path='data'
     root=ET.Element('mujoco')
     set_simulator_option(root)
     asset=ET.SubElement(root,'asset')

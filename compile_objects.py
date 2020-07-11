@@ -47,27 +47,18 @@ def get_COM(obj):
     mesh=tm.exchange.load.load(obj)
     return mesh.center_mass,mesh.bounds
 
-def compile_objects(asset,object_file_name,scale_obj=None,force=False):
-    names = []
-    fullnames = []
-    object_list = glob.glob(object_file_name)
-    for obj in object_list:
-        obj=ensure_stl(obj,force)
-        names.append(path_leaf_no_extension(obj))
-        fullnames.append(os.path.abspath(obj))
-        
-        mesh=ET.SubElement(asset,'mesh')
-        mesh.set('file',fullnames[-1])
-        mesh.set('name',names[-1])
-        if scale_obj is not None:
-            mesh.set('scale',str(scale_obj)+' '+str(scale_obj)+' '+str(scale_obj))
-    return names,fullnames
-
-def compile_body(name,b,asset,g,DUMMY_NAMES=set()):
+def compile_body(name,b,asset,g,DUMMY_NAMES=set(),force=False,material=None):
     b.set('name',name)
-    if isinstance(g,list):
+    if isinstance(g,str):
+        g=ensure_stl(g,force)
+        gname=path_leaf_no_extension(g)
+        mesh=ET.SubElement(asset,'mesh')
+        mesh.set('file',os.path.abspath(g))
+        mesh.set('name',gname)
+        compile_body(name,b,asset,{'type':'mesh','mesh':gname,'name':name})
+    elif isinstance(g,list):
         for gi in g:
-            DUMMY_NAMES=compile_body(name,b,asset,gi,DUMMY_NAMES=DUMMY_NAMES)
+            DUMMY_NAMES=compile_body(name,b,asset,gi,DUMMY_NAMES=DUMMY_NAMES,force=force,material=material)
         return DUMMY_NAMES
     else:
         assert isinstance(g,dict)
@@ -86,6 +77,8 @@ def compile_body(name,b,asset,g,DUMMY_NAMES=set()):
         if 'name' not in g:
             geom.set('name',name+':dummy'+str(len(DUMMY_NAMES)))
             DUMMY_NAMES.add(len(DUMMY_NAMES))
+        if material is not None:
+            geom.set('material',material)
         return DUMMY_NAMES
 
 def hollow_prism_create(vss,axis,slice=32,name=None):
@@ -286,19 +279,19 @@ def surrogate_object_10(name):
     return ret
 
 def compare_debug(id,sur,move_x):
-    path='data/gripper'
+    path='data/'
     root=ET.Element('mujoco')
     set_simulator_option(root)
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
-    names,fullnames=compile_objects(asset,'data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
+    object_list=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
     
     b=ET.SubElement(body,'body')
-    compile_body(names[id],b,asset,[{'type':'mesh','mesh':names[id]}])
-    print('Comparing for %s!'%fullnames[id])
+    compile_body('Real',b,asset,object_list[id])
+    print('Comparing for %s!'%object_list[id])
     
     b=ET.SubElement(body,'body')
-    compile_body(names[id]+'Surrogate',b,asset,sur(names[id]+'Surrogate'))
+    compile_body('Surrogate',b,asset,sur('Surrogate'))
     joint=ET.SubElement(b,'joint')
     joint.set('axis','1 0 0')
     joint.set('type','slide')
@@ -316,9 +309,8 @@ def compare_debug(id,sur,move_x):
         viewer.render()
 
 if __name__=='__main__':
-    pass
-    #auto_download()
-    #compare_debug(0,surrogate_object_05,1.)
+    auto_download()
+    compare_debug(0,surrogate_object_05,1.)
     #compare_debug(1,surrogate_object_03,1.)
     #compare_debug(2,surrogate_object_07,1.)
     #compare_debug(3,surrogate_object_10,1.)

@@ -1,5 +1,5 @@
-from compile_objects import auto_download,compile_objects,get_COM,compile_body
 from compile_gripper import Link,Gripper,set_simulator_option
+from compile_objects import *
 import mujoco_py as mjc
 import lxml.etree as ET
 import os
@@ -77,7 +77,7 @@ class World:
     def __init__(self):
         pass
         
-    def compile(self,object_file_name,link,path,damping,damping_gripper,scale_obj):
+    def compile(self,objects,link,path,damping,damping_gripper,scale_obj):
         root=ET.Element('mujoco')
         sz=ET.SubElement(root,'size')
         sz.set('njmax','8000')
@@ -92,7 +92,7 @@ class World:
         create_light(body)
         
         #object
-        self.compile_objects(object_file_name,asset,body,damping,scale_obj)
+        self.compile_objects(objects,asset,body,damping,scale_obj)
         
         #link
         if link is not None:
@@ -101,7 +101,7 @@ class World:
         else: self.link=None
         return root
 
-    def compile_objects(self,object_file_name,asset,body,damping,scale_obj):
+    def compile_objects(self,objects,asset,body,damping,scale_obj):
         #<texture name="texgeom" type="cube" builtin="flat" mark="cross" width="127" height="127" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" markrgb="1 1 1" random="0.01"/>  
         #<material name='geom' texture="texgeom" texuniform="true"/>
         #texture
@@ -122,17 +122,18 @@ class World:
         material.set('texture','texgeom')
         material.set('texuniform','true')
         #object
-        if object_file_name is not None:
-            self.names,self.fullnames=compile_objects(asset,object_file_name,scale_obj)
-            for name,fullname in zip(self.names,self.fullnames):
+        if objects is not None:
+            self.names=[]
+            for iobj,objInfo in enumerate(objects):
                 #<body name='obj' pos='0 -.08 1'>
                     #<geom name='obj' type='capsule' size='.05 .075'/>
                     #<joint name='ballz' type='slide' axis='0 0 1' limited='false' damping='.01'/>
                     #<joint name='bally' type='slide' axis='0 1 0' limited='false' damping='.01'/>
                     #<joint name='ballx' type='hinge' axis='1 0 0' limited='false' damping='.01'/>
                 #</body>
+                self.names.append(str(iobj))
                 obj=ET.SubElement(body,'body')
-                compile_body(name,obj,asset,[{'name':name,'mesh':name,'type':'mesh','material':'geom'}])
+                compile_body(str(iobj),obj,asset,objInfo,material='geom')
                 #joint
                 for p in range(2):
                     for i in range(3):
@@ -143,15 +144,15 @@ class World:
                             if d<2:axis+=' '
                         joint.set('axis',axis)
                         joint.set('limited','false')
-                        joint.set('name',name+str('t' if p==0 else 'r')+str(i))
+                        joint.set('name',self.names[-1]+str('t' if p==0 else 'r')+str(i))
                         joint.set('type','slide' if p==0 else 'hinge')
                         joint.set('damping',str(damping))
         else: 
             self.names=None 
             self.fullnames=None
 
-    def compile_simulator(self,object_file_name=None,link=None,path='data/gripper',*,damping=10,damping_gripper=1000,scale_obj=2):
-        root=self.compile(object_file_name=object_file_name,link=link,path=path,damping=damping,damping_gripper=damping_gripper,scale_obj=scale_obj)
+    def compile_simulator(self,objects=None,link=None,path='data',*,damping=10,damping_gripper=1000,scale_obj=2):
+        root=self.compile(objects=objects,link=link,path=path,damping=damping,damping_gripper=damping_gripper,scale_obj=scale_obj)
         open(path+'/world_PID='+str(os.getpid())+'.xml','w').write(ET.tostring(root,pretty_print=True).decode())
         model=mjc.load_model_from_path(path+'/world_PID='+str(os.getpid())+'.xml')
         self.sim=mjc.MjSim(model)
@@ -171,13 +172,13 @@ class World:
                         addr.append(self.sim.model.get_joint_qpos_addr(name+str('t' if p==0 else 'r')+str(d)))
                 self.addrs.append(addr)
                 #mesh z coordinates
-                minZ=10000.0
-                id=model.mesh_names.index(name)
-                vid0=model.mesh_vertadr[id]
-                vid1=vid0+model.mesh_vertnum[id]
-                for vid in range(vid0,vid1):
-                    minZ=min(model.mesh_vert[vid][2],minZ)
-                self.COMs.append(minZ)
+                #minZ=10000.0
+                #id=model.mesh_names.index(name)
+                #vid0=model.mesh_vertadr[id]
+                #vid1=vid0+model.mesh_vertnum[id]
+                #for vid in range(vid0,vid1):
+                #    minZ=min(model.mesh_vert[vid][2],minZ)
+                self.COMs.append(0.)
         else: 
             self.addrs=[]
 
@@ -204,19 +205,29 @@ class World:
             state.qvel[addr[3+Gripper.Z]]=0
             off+=1
         self.sim.set_state(state)
-        self.target_geom_id=self.sim.model.geom_names.index(self.names[id])
+        #self.target_geom_id=self.sim.model.geom_names.index(self.names[id])
         self.target_object_id=id
 
 if __name__=='__main__':
-    auto_download()
-    
     #create gripper
     gripper=Gripper()
     link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=-2.)
 
-    #create world    
-    world=World()
-    world.compile_simulator(object_file_name='data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off',link=link)
+    #create world 
+    world=World()  
+    auto_download()
+    objs=[surrogate_object_01('01'),    \
+          surrogate_object_02('02'),    \
+          surrogate_object_03('03'),    \
+          surrogate_object_04('04'),    \
+          surrogate_object_05('05'),    \
+          surrogate_object_06('06'),    \
+          surrogate_object_07('07'),    \
+          surrogate_object_08('08'),    \
+          surrogate_object_09('09'),    \
+          surrogate_object_10('10')]
+    #glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
+    world.compile_simulator(objects=objs,link=link)
     
     #create viewer
     viewer=mjc.MjViewer(world.sim)
