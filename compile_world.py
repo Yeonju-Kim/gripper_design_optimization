@@ -159,6 +159,22 @@ class World:
         self.get_sim_info()
         self.test_object(0)
         
+    def get_minZ(self,body_name):
+        minZ=10000.0
+        model=self.sim.model
+        bid=model.body_names.index(body_name)
+        geom_adr=model.body_geomadr[bid]
+        geom_num=model.body_geomnum[bid]
+        for gid in range(geom_adr,geom_adr+geom_num):
+            mid=model.geom_dataid[gid]
+            if mid<0:
+                continue
+            vid0=model.mesh_vertadr[mid]
+            vid1=vid0+model.mesh_vertnum[mid]
+            for vid in range(vid0,vid1):
+                minZ=min(model.mesh_vert[vid][2],minZ)
+        return minZ-0.1
+        
     def get_sim_info(self):
         if self.names is not None:
             self.addrs=[]
@@ -172,17 +188,11 @@ class World:
                         addr.append(self.sim.model.get_joint_qpos_addr(name+str('t' if p==0 else 'r')+str(d)))
                 self.addrs.append(addr)
                 #mesh z coordinates
-                #minZ=10000.0
-                #id=model.mesh_names.index(name)
-                #vid0=model.mesh_vertadr[id]
-                #vid1=vid0+model.mesh_vertnum[id]
-                #for vid in range(vid0,vid1):
-                #    minZ=min(model.mesh_vert[vid][2],minZ)
-                self.COMs.append(0.)
+                self.COMs.append(self.get_minZ(name))
         else: 
             self.addrs=[]
 
-    def test_object(self,id,sep_dist=[5.,0.]):
+    def test_object(self,id,sep_dist=[3.,0.]):
         self.sim.reset()
         if self.names is None:
             return
@@ -205,8 +215,13 @@ class World:
             state.qvel[addr[3+Gripper.Z]]=0
             off+=1
         self.sim.set_state(state)
-        #self.target_geom_id=self.sim.model.geom_names.index(self.names[id])
         self.target_object_id=id
+        
+        model=self.sim.model
+        bid=model.body_names.index(self.names[id])
+        geom_adr=model.body_geomadr[bid]
+        geom_num=model.body_geomnum[bid]
+        self.target_geom_ids=range(geom_adr,geom_adr+geom_num)
 
 if __name__=='__main__':
     #create gripper
@@ -215,18 +230,21 @@ if __name__=='__main__':
 
     #create world 
     world=World()  
-    auto_download()
-    objs=[surrogate_object_01('01'),    \
-          surrogate_object_02('02'),    \
-          surrogate_object_03('03'),    \
-          surrogate_object_04('04'),    \
-          surrogate_object_05('05'),    \
-          surrogate_object_06('06'),    \
-          surrogate_object_07('07'),    \
-          surrogate_object_08('08'),    \
-          surrogate_object_09('09'),    \
-          surrogate_object_10('10')]
-    #glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
+    use_surrogate=True
+    if use_surrogate:
+        objs=[surrogate_object_01('01'),    \
+              surrogate_object_02('02'),    \
+              surrogate_object_03('03'),    \
+              surrogate_object_04('04'),    \
+              surrogate_object_05('05'),    \
+              surrogate_object_06('06'),    \
+              surrogate_object_07('07'),    \
+              surrogate_object_08('08'),    \
+              surrogate_object_09('09'),    \
+              surrogate_object_10('10')]
+    else:
+        auto_download()
+        objs=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
     world.compile_simulator(objects=objs,link=link)
     
     #create viewer

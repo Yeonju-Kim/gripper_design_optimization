@@ -187,7 +187,7 @@ class Link:
 class Gripper:
     X,Y,Z=(0,1,2)
     EPS=1e-6
-    def __init__(self,*,base_radius=0.5,finger_length=0.3,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
+    def __init__(self,*,base_radius=0.25,finger_length=0.15,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
         self.base=cylinder_create(base_radius,thick)
         self.base=Gripper.cylinder_transform(self.base,[0,0,-thick/2])
         #finger

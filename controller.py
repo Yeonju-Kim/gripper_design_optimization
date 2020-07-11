@@ -1,13 +1,13 @@
-from compile_objects import auto_download
 from compile_gripper import Gripper
 from compile_world import World
+from compile_objects import *
 import mujoco_py as mjc
 import trimesh as tm
 import numpy as np
 import math
 
 class Controller:
-    def __init__(self,world,*,approach_vel=0.2,thres_vel=1e-1,lift_vel=1.0,lift_height=3.5,shake_vel=[0.4,0,0],shake_times=10):
+    def __init__(self,world,*,approach_vel=0.2,thres_vel=1e-1,lift_vel=1.0,lift_height=1.5,shake_vel=[0.4,0,0],shake_times=10):
         self.world=world
         self.sim=self.world.sim
         if self.world.link is None:
@@ -28,7 +28,6 @@ class Controller:
         self.link_ids=[]
         self.get_link_ids(self.link)
         self.floor_id=self.sim.model.geom_names.index('floor')
-        self.object_id=[self.sim.model.geom_names.index(name) for name in self.world.names]
     
     def get_link_ids(self,link):
         for idn,n in enumerate(self.sim.model.geom_names):
@@ -76,11 +75,11 @@ class Controller:
         for ic in range(self.sim.data.ncon):
             c=self.sim.data.contact[ic]
             if c.geom1 in self.link_ids and c.geom2 not in self.link_ids:
-                if c.geom2==self.world.target_geom_id:
+                if c.geom2 in self.world.target_geom_ids:
                     self.contact_poses.append([cp-op for cp,op in zip(c.pos,objpos)])
                     self.contact_normals.append(c.frame[0:3].tolist())
             elif c.geom1 not in self.link_ids and c.geom2 in self.link_ids:
-                if c.geom1==self.world.target_geom_id:
+                if c.geom1 in self.world.target_geom_ids:
                     self.contact_poses.append([cp-op for cp,op in zip(c.pos,objpos)])
                     #to compute Q_* metric, we assume normals are point inward i.e. n*p<0
                     self.contact_normals.append([-n for n in c.frame[0:3].tolist()])
@@ -229,15 +228,28 @@ class Controller:
         return True
     
 if __name__=='__main__':
-    auto_download()
-    
     #create gripper
     gripper=Gripper()
-    link=gripper.get_robot(base_off=0.4,finger_width=0.4,finger_length=0.3,finger_curvature=4.)
+    link=gripper.get_robot(base_off=0.2,finger_length=0.15,finger_width=0.2,finger_curvature=4.)
 
     #create world    
     world=World()
-    world.compile_simulator(object_file_name='data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off',link=link)
+    use_surrogate=True
+    if use_surrogate:
+        objs=[surrogate_object_01('01'),    \
+              surrogate_object_02('02'),    \
+              surrogate_object_03('03'),    \
+              surrogate_object_04('04'),    \
+              surrogate_object_05('05'),    \
+              surrogate_object_06('06'),    \
+              surrogate_object_07('07'),    \
+              surrogate_object_08('08'),    \
+              surrogate_object_09('09'),    \
+              surrogate_object_10('10')]
+    else:
+        auto_download()
+        objs=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
+    world.compile_simulator(objects=objs,link=link)
     viewer=mjc.MjViewer(world.sim)
     
     #create controller
@@ -245,7 +257,7 @@ if __name__=='__main__':
     
     id=0
     while True:
-        controller.reset(id,[0.1,0.,5.],-0.1)
+        controller.reset(id,[0.1,0.,3.],-0.1)
         while not controller.step():
             viewer.render()
         id=(id+1)%len(controller.world.names)
