@@ -1,4 +1,4 @@
-from compile_objects import auto_download
+from compile_objects import *
 import mujoco_py as mjc
 import lxml.etree as ET
 import glob,ntpath,os
@@ -6,20 +6,9 @@ import trimesh as tm
 import numpy as np
 import math
 
-def set_simulator_option(root,dt=0.001,withparent=True):
-    #<option timestep='0.002' iterations="50" solver="PGS">
-    #    <flag energy="enable"/>
-    #</option>
-    option=ET.SubElement(root,'option')
-    option.set('timestep',str(dt))
-    option.set('iterations','50')
-    option.set('solver','PGS')
-    flag=ET.SubElement(option,'flag')
-    flag.set('filterparent','disable' if withparent else 'enable')
-    flag.set('energy','enable')
-
 class Link:
     WRITTEN_NAMES=None
+    DUMMY_NAMES=None
     
     def __init__(self,geom,name,trans=None,parent=None,affine=None):
         self.geom=geom
@@ -75,7 +64,7 @@ class Link:
         q=tm.transformations.quaternion_from_matrix(self.trans[0:3,0:3])
         return str(q[0])+' '+str(q[1])+' '+str(q[2])+' '+str(q[3])
 
-    def compile_gripper(self,body,asset,actuator,path,damping=1000.0,gear=1,*,name_suffix=''):
+    def compile_gripper(self,body,asset,actuator,path,damping=1000.0,gear=1):
         if not os.path.exists(path):
             os.mkdir(path)
         b=ET.SubElement(body,'body')
@@ -85,7 +74,8 @@ class Link:
         #geom
         if self.parent is None:
             Link.WRITTEN_NAMES=set()
-        self.add_geom(b,asset,self.geom,path,name_suffix)
+        Link.DUMMY_NAMES=set()
+        self.add_geom(b,asset,self.geom,path)
         #joint
         self.ctrl_names=[]
         if self.parent is None:
@@ -123,12 +113,12 @@ class Link:
                 self.ctrl_names.append(self.name)
         #children
         for c in self.children:
-            c.compile_gripper(b,asset,actuator=actuator,path=path,gear=gear,name_suffix=name_suffix)
+            c.compile_gripper(b,asset,actuator=actuator,path=path,gear=gear)
 
-    def add_geom(self,b,asset,g,path,name_suffix):
+    def add_geom(self,b,asset,g,path):
         if isinstance(g,list):
             for gi in g:
-                self.add_geom(b,asset,gi,path,name_suffix)
+                self.add_geom(b,asset,gi,path)
         else:
             assert isinstance(g,dict)
             if 'vertex' in g:
@@ -145,6 +135,9 @@ class Link:
             geom=ET.SubElement(b,'geom')
             for k,v in g.items():
                 geom.set(k,str(v))
+            if 'name' not in g:
+                geom.set('name',self.name+':dummy'+str(len(Link.DUMMY_NAMES)))
+                Link.DUMMY_NAMES.add(len(Link.DUMMY_NAMES))
 
     def finger_id(self):
         if self.parent.parent is None:
@@ -195,7 +188,7 @@ class Gripper:
     X,Y,Z=(0,1,2)
     EPS=1e-6
     def __init__(self,*,base_radius=0.5,finger_length=0.3,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
-        self.base=Gripper.cylinder_create(base_radius,thick)
+        self.base=cylinder_create(base_radius,thick)
         self.base=Gripper.cylinder_transform(self.base,[0,0,-thick/2])
         #finger
         slice=16
@@ -204,15 +197,12 @@ class Gripper:
             l,r=(-finger_width/2,finger_width/2)
             alpha0,alpha1=(i/slice,(i+1)/slice)
             a,b=(l*(1-alpha0)+r*alpha0,l*(1-alpha1)+r*alpha1)
-            self.finger.append(Gripper.box_create([thick,(a,b),finger_length],'fingerSeg%d'%i))
+            self.finger.append(box_create([thick,(a,b),finger_length],'fingerSeg%d'%i))
         #hinge
-        self.hinge=Gripper.cylinder_create(hinge_rad,hinge_thick)
+        self.hinge=cylinder_create(hinge_rad,hinge_thick)
         self.hinge=Gripper.cylinder_transform(self.hinge,[0,0,-hinge_thick/2])
         self.hinge=Gripper.cylinder_transform(self.hinge,tm.transformations.rotation_matrix(angle=math.pi/2,direction=[1,0,0]))
     
-    def cylinder_create(rad,height):
-        return {'type':'cylinder','size':rad,'fromto':'0 0 0 0 0 %f'%height}
-     
     def cylinder_scale_xy(c,scaleXY):
         ret=dict()
         for k,v in c.items():
@@ -235,22 +225,6 @@ class Gripper:
             t=ft[3:6]+T
         ret['fromto']='%f %f %f %f %f %f'%tuple(f.tolist()+t.tolist())
         return ret
-    
-    def box_create(ext,name):
-        vssr=[]
-        for d in range(3):
-            if isinstance(ext[d],float) or isinstance(ext[d],int):
-                ext[d]=(-ext[d]/2,ext[d]/2)
-        for id in range(8):
-            vssr.append(ext[0][0] if (id&1)==0 else ext[0][1])
-            vssr.append(ext[1][0] if (id&2)==0 else ext[1][1])
-            vssr.append(ext[2][0] if (id&4)==0 else ext[2][1])
-        vert=''
-        for v in vssr:
-            vert+=str(v)+' '
-            
-        #transform
-        return {'type':'mesh','vertex':vert[0:len(vert)-1],'name':name}
     
     def mesh_scale(sg,T):
         assert 'vertex' in sg
@@ -434,7 +408,7 @@ if __name__=='__main__':
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
     actuator=ET.SubElement(root,'actuator')
-    link=gripper.get_robot(base_off=0.2,finger_width=0.5,finger_length=0.5,finger_curvature=3.)
+    link=gripper.get_robot(base_off=0.2,finger_width=0.2,finger_length=0.5,finger_curvature=-3.)
     link.compile_gripper(body,asset,actuator,path)
     
     open(path+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())

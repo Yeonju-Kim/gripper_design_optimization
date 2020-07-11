@@ -1,4 +1,4 @@
-from compile_objects import auto_download,compile_objects,get_COM
+from compile_objects import auto_download,compile_objects,get_COM,compile_body
 from compile_gripper import Link,Gripper,set_simulator_option
 import mujoco_py as mjc
 import lxml.etree as ET
@@ -79,6 +79,9 @@ class World:
         
     def compile(self,object_file_name,link,path,damping,damping_gripper,scale_obj):
         root=ET.Element('mujoco')
+        sz=ET.SubElement(root,'size')
+        sz.set('njmax','8000')
+        sz.set('nconmax','4000')
         set_simulator_option(root)
         asset=ET.SubElement(root,'asset')
         body=ET.SubElement(root,'worldbody')
@@ -93,7 +96,7 @@ class World:
         
         #link
         if link is not None:
-            link.compile_gripper(body,asset,actuator,path,damping_gripper,name_suffix='PID='+str(os.getpid()))
+            link.compile_gripper(body,asset,actuator,path,damping_gripper)
             self.link=link
         else: self.link=None
         return root
@@ -129,13 +132,7 @@ class World:
                     #<joint name='ballx' type='hinge' axis='1 0 0' limited='false' damping='.01'/>
                 #</body>
                 obj=ET.SubElement(body,'body')
-                obj.set('name',name)
-                #geom
-                geom=ET.SubElement(obj,'geom')
-                geom.set('name',name)
-                geom.set('mesh',name)
-                geom.set('type','mesh')
-                geom.set('material','geom')
+                compile_body(name,obj,asset,[{'name':name,'mesh':name,'type':'mesh','material':'geom'}])
                 #joint
                 for p in range(2):
                     for i in range(3):
@@ -215,7 +212,7 @@ if __name__=='__main__':
     
     #create gripper
     gripper=Gripper()
-    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
+    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=-2.)
 
     #create world    
     world=World()

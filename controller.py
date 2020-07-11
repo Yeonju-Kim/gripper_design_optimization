@@ -31,7 +31,9 @@ class Controller:
         self.object_id=[self.sim.model.geom_names.index(name) for name in self.world.names]
     
     def get_link_ids(self,link):
-        self.link_ids.append(self.sim.model.geom_names.index(link.name))
+        for idn,n in enumerate(self.sim.model.geom_names):
+            if n.startswith(link.name):
+                self.link_ids.append(idn)
         for c in link.children:
             self.get_link_ids(c)
     
@@ -154,7 +156,7 @@ class Controller:
         self.sim.step()
         self.elapsed+=1
         fc,oc=self.contact_state()
-        if fc or not oc:  #if floor contact or no object contact, immediately return false
+        if fc:# or not oc:  #if floor contact or no object contact, immediately return false
             return False
         
         #return succeed or failed based on whether gripper is still in contact with object
@@ -231,7 +233,7 @@ if __name__=='__main__':
     
     #create gripper
     gripper=Gripper()
-    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
+    link=gripper.get_robot(base_off=0.4,finger_width=0.4,finger_length=0.3,finger_curvature=4.)
 
     #create world    
     world=World()
