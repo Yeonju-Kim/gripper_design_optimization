@@ -64,9 +64,7 @@ class Link:
         q=tm.transformations.quaternion_from_matrix(self.trans[0:3,0:3])
         return str(q[0])+' '+str(q[1])+' '+str(q[2])+' '+str(q[3])
 
-    def compile_gripper(self,body,asset,actuator,path,damping=1000.0,gear=1):
-        if not os.path.exists(path):
-            os.mkdir(path)
+    def compile_gripper(self,body,asset,actuator,damping=1000.0,gear=1):
         b=ET.SubElement(body,'body')
         b.set('pos',self.get_pos())
         b.set('quat',self.get_quat())
@@ -75,7 +73,7 @@ class Link:
         if self.parent is None:
             Link.WRITTEN_NAMES=set()
         Link.DUMMY_NAMES=set()
-        self.add_geom(b,asset,self.geom,path)
+        self.add_geom(b,asset,self.geom)
         #joint
         self.ctrl_names=[]
         if self.parent is None:
@@ -113,12 +111,12 @@ class Link:
                 self.ctrl_names.append(self.name)
         #children
         for c in self.children:
-            c.compile_gripper(b,asset,actuator=actuator,path=path,gear=gear)
+            c.compile_gripper(b,asset,actuator=actuator,gear=gear)
 
-    def add_geom(self,b,asset,g,path):
+    def add_geom(self,b,asset,g):
         if isinstance(g,list):
             for gi in g:
-                self.add_geom(b,asset,gi,path)
+                self.add_geom(b,asset,gi)
         else:
             assert isinstance(g,dict)
             if 'vertex' in g:

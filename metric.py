@@ -17,45 +17,35 @@ class MassMetric(Metric):
     #this is the mass of the gripper
     OBJECT_DEPENDENT=False
     
-    def __init__(self,controller,link=None):
-        self.controller=controller
-        self.target_link=link
-        if link is None:
-            self.target_link=self.controller.link
+    def __init__(self,controller):
+        if isinstance(controller,Controller):
+            self.sim=controller.sim
+        else: self.sim=controller
         
     def compute(self):
-        mass=self.get_mass(self.target_link)
+        model=self.sim.model
+        bid=model.body_names.index('base')
+        mass=model.body_subtreemass[bid]
         return 1./mass
-    
-    def get_mass(self,link):
-        model=self.controller.sim.model
-        bid=model.body_names.index(link.name)
-        ret=model.body_mass[bid]
-        for c in link.children:
-            ret+=self.get_mass(c)
-        return ret
         
 class SizeMetric(Metric):
     #this is the surface area of the bounding box
     OBJECT_DEPENDENT=False
     
-    def __init__(self,controller,link=None):
-        self.controller=controller
-        self.target_link=link
-        if link is None:
-            self.target_link=self.controller.link
+    def __init__(self,controller):
+        if isinstance(controller,Controller):
+            self.sim=controller.sim
+        else: self.sim=controller
         
     def compute(self):
         #compute bounding box
         vmin=[ 1000., 1000., 1000.]
         vmax=[-1000.,-1000.,-1000.]
-        self.controller.sim.set_state(self.controller.init_state)
-        self.controller.sim.forward()
-        model=self.controller.sim.model
-        data=self.controller.sim.data
-        names=self.body_names(self.target_link)
-        for bname in names:
-            bid=model.body_names.index(bname)
+        model=self.sim.model
+        data=self.sim.data
+        self.sim.forward()
+        bids=self.body_names('base')
+        for bid in bids:
             geom_adr=model.body_geomadr[bid]
             geom_num=model.body_geomnum[bid]
             for gid in range(geom_adr,geom_adr+geom_num):
@@ -83,11 +73,20 @@ class SizeMetric(Metric):
             surface_area+=ext[0]*ext[1]*2
         return 1./surface_area
         
-    def body_names(self,link):
-        ret=[link.name]
-        for c in link.children:
-            ret+=self.body_names(c)
-        return ret
+    def body_names(self,rootName):
+        bids=[]
+        model=self.sim.model
+        for i in range(model.nbody):
+            if model.body_names[i]==rootName:
+                bids.append(i)
+            else:
+                bid=i
+                while bid>0:
+                    bid=model.body_parentid[bid]
+                    if model.body_names[bid]==rootName:
+                        bids.append(i)
+                        break
+        return bids
         
 class Q1Metric(Metric):
     #this is the grasp quality measured after close
@@ -183,8 +182,6 @@ class ElapsedMetric(Metric):
         return self.controller.elapsed*dt
     
 if __name__=='__main__':
-    auto_download()
-    
     #create gripper
     gripper=Gripper()
     link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
@@ -204,8 +201,6 @@ if __name__=='__main__':
     #compute mass metric
     print('MassMetric=',MassMetric(controller).compute())
     print('SizeMetric=',SizeMetric(controller).compute())
-    print('MassMetric=',MassMetric(controller,link.children[0]).compute())
-    print('SizeMetric=',SizeMetric(controller,link.children[0]).compute())
     print('Q1Metric=',Q1Metric(controller).compute())
     print('QInfMetric=',QInfMetric(controller).compute())
     print('QMSVMetric=',QMSVMetric(controller).compute())

@@ -10,7 +10,7 @@ import math,copy,os,shutil
 
 class GripperProblemBO(ProblemBO):
     NUMBER_PROCESS=max(1,multiprocessing.cpu_count()//2)
-    DEFAULT_PATH='data/gripper_tmp'
+    DEFAULT_PATH='data'
     #design space can be policy-related or gripper-related:
     #policy-related variables are: theta,phi,beta
     #all other variables are gripper-related (e.g. finger_length)
@@ -19,6 +19,8 @@ class GripperProblemBO(ProblemBO):
     #object-dependent metrics will be first maximized for each object, then taken mean over all objects
     #object-independent metrics will be computed for each gripper
     def __init__(self,*,design_space,metrics,objects,policy_space=[10,5,10,3.]):
+        if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
+            os.mkdir(GripperProblemBO.DEFAULT_PATH)
         print('Initializing Domain, multi-threaded evaluation using %d processes!'%GripperProblemBO.NUMBER_PROCESS)
         self.gripper=Gripper()
         self.objects=objects
@@ -114,8 +116,18 @@ class GripperProblemBO(ProblemBO):
             else:
                 assert v>=a and v<=b
                 args[n]=v
+        
+        root=ET.Element('mujoco')
+        set_simulator_option(root)
+        asset=ET.SubElement(root,'asset')
+        body=ET.SubElement(root,'worldbody')
+        actuator=ET.SubElement(root,'actuator')
         link=self.gripper.get_robot(**args)
-        return link,[0. if m.OBJECT_DEPENDENT else m(link).compute() for m in self.metrics]
+        link.compile_gripper(body,asset,actuator)
+        
+        open(GripperProblemBO.DEFAULT_PATH+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
+        model=mjc.load_model_from_path(GripperProblemBO.DEFAULT_PATH+'/gripper.xml')
+        return link,[0. if m.OBJECT_DEPENDENT else m(mjc.MjSim(model)).compute() for m in self.metrics]
     
     def compute_object_dependent_metrics(self,link,pt,policy):
         #create designed gripper
@@ -192,7 +204,12 @@ class GripperProblemBO(ProblemBO):
         import glob
         ret='ProblemBO:\n'
         for o in self.objects:
-            ret+='Object: %s\n'%str(o)
+            if isinstance(o,str):
+                var=str(o)
+            elif isinstance(o,list): 
+                var='Composite(#geom=%d)'%len(o)
+            else: var='Composite(#geom=1)'
+            ret+='Object: %s\n'%var
         for a,b,n in zip(self.vmin,self.vmax,self.vname):
             ret+='Param %20s: [%10f,%10f]\n'%(n,a,b)
         ret+='Evaluating %d policies per point\n'%len(self.policies)
@@ -202,18 +219,16 @@ class GripperProblemBO(ProblemBO):
         return 'GripperProblemBO'
 
 if __name__=='__main__':
-    auto_download()
-    
     #case I: only optimize gripper
-    from dataset_canonical import get_dataset_canonical
+    from dataset_cup import get_dataset_cup
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='MassMetric|Q1Metric',
-                            objects=get_dataset_canonical(True),policy_space=[10,5,10,3.])
+                            objects=get_dataset_cup(True),policy_space=[10,5,10,3.])
     print(domain)
     
     #case II: optimize gripper as well as policy
-    from dataset_canonical import get_dataset_canonical
+    from dataset_cup import get_dataset_cup
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
-                            objects=get_dataset_canonical(True),policy_space=[None,None,5,3.])
+                            objects=get_dataset_cup(True),policy_space=[None,None,5,3.])
     print(domain)
     
     #test evaluating a single point
