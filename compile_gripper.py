@@ -185,7 +185,7 @@ class Link:
 class Gripper:
     X,Y,Z=(0,1,2)
     EPS=1e-6
-    def __init__(self,*,base_radius=0.25,finger_length=0.15,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
+    def __init__(self,*,base_radius=0.5,finger_length=0.15,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
         self.base=cylinder_create(base_radius,thick)
         self.base=geom_transform(self.base,[0,0,-thick/2])
         #finger
@@ -326,6 +326,8 @@ class Gripper:
 if __name__=='__main__':
     gripper=Gripper()
     path='data'
+    if not os.path.exists(path):
+        os.mkdir(path)
     root=ET.Element('mujoco')
     set_simulator_option(root)
     asset=ET.SubElement(root,'asset')

@@ -152,6 +152,8 @@ class World:
             self.fullnames=None
 
     def compile_simulator(self,objects=None,link=None,path='data',*,damping=10,damping_gripper=1000,scale_obj=2):
+        if not os.path.exists(path):
+            os.mkdir(path)
         root=self.compile(objects=objects,link=link,path=path,damping=damping,damping_gripper=damping_gripper,scale_obj=scale_obj)
         open(path+'/world_PID='+str(os.getpid())+'.xml','w').write(ET.tostring(root,pretty_print=True).decode())
         model=mjc.load_model_from_path(path+'/world_PID='+str(os.getpid())+'.xml')

@@ -7,8 +7,6 @@ import os
 plot=False
 test=True
 if __name__=='__main__':
-    auto_download()
-    
     from dataset_cup import get_dataset_cup
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='ElapsedMetric',
                             objects=get_dataset_cup(True)[0:1],policy_space=[5,5,5,3.])
