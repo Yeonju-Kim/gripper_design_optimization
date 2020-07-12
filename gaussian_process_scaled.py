@@ -13,7 +13,8 @@ class GaussianProcessScaled:
         if self.vmax==self.vmin:
             self.slope=1.
         else: self.slope=1./(self.vmax-self.vmin)
-        self.gp.fit(x,[(yi-self.base)*self.slope for yi in y])
+        yss=[(yi-self.base)*self.slope for yi in y]
+        self.gp.fit(x,yss)
         
     def predict(self,xss,return_std=False):
         ret=self.gp.predict(xss,return_std=return_std)

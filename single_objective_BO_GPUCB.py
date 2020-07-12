@@ -17,8 +17,12 @@ class SingleObjectiveBOGPUCB:
         
     def init(self,num_grid):
         coordinates=[np.linspace(vminVal,vmaxVal,num_grid) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
-        self.points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
-        self.scores=[metrics[0] for metrics in self.problemBO.eval(self.points)]
+        if os.path.exists('init.dat'):
+            self.load('init.dat')
+        else:
+            self.points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
+            self.scores=[metrics[0] for metrics in self.problemBO.eval(self.points)]
+            #self.save('init.dat')
         self.gp.fit(self.scale_01(self.points),self.scores)
         
     def iterate(self):
