@@ -1,4 +1,4 @@
-from compile_objects import auto_download,compile_objects
+from compile_objects import *
 from compile_gripper import Gripper
 from compile_world import World
 from problem_BO import ProblemBO
@@ -18,10 +18,10 @@ class GripperProblemBO(ProblemBO):
     #metric can be object-dependent or object-independent:
     #object-dependent metrics will be first maximized for each object, then taken mean over all objects
     #object-independent metrics will be computed for each gripper
-    def __init__(self,*,design_space,metrics,object_file_name,policy_space=[10,5,10,3.]):
+    def __init__(self,*,design_space,metrics,objects,policy_space=[10,5,10,3.]):
         print('Initializing Domain, multi-threaded evaluation using %d processes!'%GripperProblemBO.NUMBER_PROCESS)
         self.gripper=Gripper()
-        self.object_file_name=object_file_name
+        self.objects=objects
         
         #vmin/vmax/vname
         self.vmin=[]
@@ -60,10 +60,6 @@ class GripperProblemBO(ProblemBO):
             
         #metric
         self.metrics=[globals()[metricName] for metricName in metrics.split('|')]
-        
-        #we need to compile objects once to invoke format conversion
-        import lxml.etree as ET
-        compile_objects(ET.Element('asset'),self.object_file_name)
     
     def eval(self,points):
         #gripper_metrics[pt_id][metric_id]
@@ -133,7 +129,7 @@ class GripperProblemBO(ProblemBO):
         
         #compile to MuJoCo
         world=World()
-        world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,object_file_name=self.object_file_name,link=link)
+        world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects,link=link)
         ctrl=Controller(world)
         
         #then compute object-dependent metrics:
@@ -195,8 +191,8 @@ class GripperProblemBO(ProblemBO):
     def __str__(self):
         import glob
         ret='ProblemBO:\n'
-        for o in glob.glob(self.object_file_name):
-            ret+='Object: %s\n'%o
+        for o in self.objects:
+            ret+='Object: %s\n'%str(o)
         for a,b,n in zip(self.vmin,self.vmax,self.vname):
             ret+='Param %20s: [%10f,%10f]\n'%(n,a,b)
         ret+='Evaluating %d policies per point\n'%len(self.policies)
@@ -209,15 +205,15 @@ if __name__=='__main__':
     auto_download()
     
     #case I: only optimize gripper
+    from dataset_canonical import get_dataset_canonical
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='MassMetric|Q1Metric',
-                            object_file_name='data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off',
-                            policy_space=[10,5,10,3.])
+                            objects=get_dataset_canonical(True),policy_space=[10,5,10,3.])
     print(domain)
     
     #case II: optimize gripper as well as policy
+    from dataset_canonical import get_dataset_canonical
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
-                            object_file_name='data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off',
-                            policy_space=[None,None,5,3.])
+                            objects=get_dataset_canonical(True),policy_space=[None,None,5,3.])
     print(domain)
     
     #test evaluating a single point

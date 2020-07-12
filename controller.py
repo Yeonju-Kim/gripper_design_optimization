@@ -4,7 +4,7 @@ from compile_objects import *
 import mujoco_py as mjc
 import trimesh as tm
 import numpy as np
-import math
+import math,copy
 
 class Controller:
     def __init__(self,world,*,approach_vel=0.5,thres_vel=1e-1,  \
@@ -75,6 +75,7 @@ class Controller:
         self.elapsed=0.0
         self.contact_poses=[]
         self.contact_normals=[]
+        self.init_state=copy.deepcopy(state)
     
     def record_contacts(self):
         #get object pos
@@ -294,5 +295,5 @@ def test_dataset_canonical():
         id=(id+1)%len(controller.world.names)
     
 if __name__=='__main__':
-    #test_dataset_cup()
-    test_dataset_canonical()
+    test_dataset_cup()
+    #test_dataset_canonical()
