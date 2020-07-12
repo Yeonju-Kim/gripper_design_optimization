@@ -10,9 +10,9 @@ if __name__=='__main__':
     auto_download()
     
     from dataset_cup import get_dataset_cup
-    domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|Q1Metric',
+    domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='MassMetric|Q1Metric',
                             objects=get_dataset_cup(True),policy_space=[0.1,math.pi/2*0.9,2.,3.])
-    domain=HyperVolumeTransformedProblemBO(domain,scale=100.)
+    #domain=HyperVolumeTransformedProblemBO(domain,scale=100.)
     BO=SingleObjectiveBOGPUCB(domain,nu=10.)
     
     #main loop
