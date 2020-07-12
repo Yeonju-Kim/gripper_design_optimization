@@ -1,7 +1,5 @@
 from multi_objective_BO_GPUCB import MultiObjectiveBOGPUCB
 from gripper_problem_BO import GripperProblemBO
-from problem_BO import HyperVolumeTransformedProblemBO
-from compile_objects import auto_download
 import os,math
 
 plot=False
@@ -36,4 +34,4 @@ if __name__=='__main__':
     #plot best gripper design
     if test:
         sol=BO.get_best()
-        domain.inner.plot_solution(sol,metric_id=0)
+        domain.plot_solution(sol,metric_id=0)

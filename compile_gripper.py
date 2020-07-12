@@ -185,8 +185,8 @@ class Link:
 class Gripper:
     X,Y,Z=(0,1,2)
     EPS=1e-6
-    def __init__(self,*,base_radius=0.5,finger_length=0.15,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
-        self.base=cylinder_create(base_radius,thick)
+    def __init__(self,*,base_rad=0.5,finger_length=0.15,finger_width=0.2,thick=0.1,hinge_rad=0.02,hinge_thick=0.02):
+        self.base=cylinder_create(base_rad,thick)
         self.base=geom_transform(self.base,[0,0,-thick/2])
         #finger
         slice=16
@@ -237,7 +237,7 @@ class Gripper:
                 l,r=(min(l,val),max(r,val))
         return r-l
             
-    def hinge_radius(self):
+    def hinge_rad(self):
         return self.hinge['size']*1.1
             
     def hinge_thick(self):
@@ -251,7 +251,7 @@ class Gripper:
         ft=[float(val) for val in self.base['fromto'].split(' ')]
         return np.linalg.norm(np.array(ft[0:3])-np.array(ft[3:6]))
             
-    def get_finger(self,top_hinge=True,bot_hinge=True,*,finger_width=None,finger_length=None,finger_curvature=None):
+    def get_finger(self,top_hinge,bot_hinge,*,finger_width,finger_length,finger_curvature,hinge_rad):
         if finger_width is None:
             scaleY=1
             finger_width=self.finger_width()
@@ -262,9 +262,14 @@ class Gripper:
             finger_length=self.finger_length()
         scaleZ=finger_length/self.finger_length()
         
+        if hinge_rad is None:
+            scaleXY=1
+            hinge_rad=self.hinge_rad()
+        scaleXY=hinge_rad/self.hinge_rad()
+        hinge=prim_scale_xy(self.hinge,scaleXY)
+        
         if finger_curvature is None:
             finger_curvature=0
-        
         finger=[geom_scale(f.copy(),[1,scaleY,scaleZ]) for f in self.finger]
         def vtrans(v):
             if v[Gripper.Y]>-finger_width/2+Gripper.EPS and v[Gripper.Y]<finger_width/2-Gripper.EPS:
@@ -273,17 +278,17 @@ class Gripper:
         scene=[Gripper.mesh_vtrans(f.copy(),vtrans) for f in finger]
         
         if top_hinge:
-            scene.append(geom_transform(self.hinge,[0,( finger_width-self.hinge_thick())/2,finger_length/2+self.hinge_radius()]))
-            scene.append(geom_transform(self.hinge,[0,(-finger_width+self.hinge_thick())/2,finger_length/2+self.hinge_radius()]))
+            scene.append(geom_transform(hinge,[0,( finger_width-self.hinge_thick())/2,finger_length/2+hinge_rad]))
+            scene.append(geom_transform(hinge,[0,(-finger_width+self.hinge_thick())/2,finger_length/2+hinge_rad]))
             
         if bot_hinge:
-            scene.append(geom_transform(self.hinge,[0,( finger_width-self.hinge_thick()*3.1)/2,-finger_length/2-self.hinge_radius()]))
-            scene.append(geom_transform(self.hinge,[0,(-finger_width+self.hinge_thick()*3.1)/2,-finger_length/2-self.hinge_radius()]))
+            scene.append(geom_transform(hinge,[0,( finger_width-self.hinge_thick()*3.1)/2,-finger_length/2-hinge_rad]))
+            scene.append(geom_transform(hinge,[0,(-finger_width+self.hinge_thick()*3.1)/2,-finger_length/2-hinge_rad]))
             
-        scene=scene_transform(scene,[0,0,finger_length/2+self.hinge_radius()])
-        return scene,tm.transformations.translation_matrix([0,0,finger_length+self.hinge_radius()*2])
+        scene=scene_transform(scene,[0,0,finger_length/2+hinge_rad])
+        return scene,tm.transformations.translation_matrix([0,0,finger_length+hinge_rad*2])
             
-    def get_base(self,base_off=0.4,num_finger=3,*,finger_width=None,base_rad=None):
+    def get_base(self,base_off,num_finger,*,finger_width,base_rad,hinge_rad):
         if finger_width is None:
             finger_width=self.finger_width()
             
@@ -291,27 +296,40 @@ class Gripper:
             scaleXY=1
             base_rad=self.base_rad()
         scaleXY=base_rad/self.base_rad()
+        base=prim_scale_xy(self.base,scaleXY)
         
-        scene=[prim_scale_xy(self.base,scaleXY)]
+        if hinge_rad is None:
+            scaleXY=1
+            hinge_rad=self.hinge_rad()
+        scaleXY=hinge_rad/self.hinge_rad()
+        hinge=prim_scale_xy(self.hinge,scaleXY)
+        
+        scene=[base]
         trans=[]
         for i in range(num_finger):
             R=tm.transformations.rotation_matrix(angle=math.pi*2*i/num_finger,direction=[0,0,1])
             #left
-            T=tm.transformations.translation_matrix([base_off,( finger_width-self.hinge_thick())/2,self.thick()/2+self.hinge_radius()])
-            scene.append(geom_transform(self.hinge,np.matmul(R,T)))
+            T=tm.transformations.translation_matrix([base_off,( finger_width-self.hinge_thick())/2,self.thick()/2+hinge_rad])
+            scene.append(geom_transform(hinge,np.matmul(R,T)))
             #right
-            T=tm.transformations.translation_matrix([base_off,(-finger_width+self.hinge_thick())/2,self.thick()/2+self.hinge_radius()])
-            scene.append(geom_transform(self.hinge,np.matmul(R,T)))
+            T=tm.transformations.translation_matrix([base_off,(-finger_width+self.hinge_thick())/2,self.thick()/2+hinge_rad])
+            scene.append(geom_transform(hinge,np.matmul(R,T)))
             #trans
-            T=tm.transformations.translation_matrix([base_off,0,self.thick()/2+self.hinge_radius()])
+            T=tm.transformations.translation_matrix([base_off,0,self.thick()/2+hinge_rad])
             trans.append(np.matmul(R,T))
         return scene,trans
             
-    def get_robot(self,base_off=0.4,num_finger=3,num_segment=3,*,   \
-                  finger_width=None,finger_length=None,finger_curvature=None,base_rad=None):
-        fingerTop,transF=self.get_finger(top_hinge=False,finger_width=finger_width,finger_length=finger_length,finger_curvature=finger_curvature)
-        finger,transF=self.get_finger(finger_width=finger_width,finger_length=finger_length,finger_curvature=finger_curvature)
-        base,transB=self.get_base(base_off=base_off,num_finger=num_finger,finger_width=finger_width,base_rad=base_rad)
+    def get_robot(self,base_off=0.4,num_finger=3,num_segment=3,*,finger_width=None,finger_length=None,finger_curvature=None,base_rad=None,hinge_rad=None):
+        num_finger=round(num_finger)
+        num_segment=round(num_segment)
+        fingerTop,transF=self.get_finger(top_hinge=False,bot_hinge=True,    \
+                                         finger_width=finger_width,finger_length=finger_length, \
+                                         finger_curvature=finger_curvature,hinge_rad=hinge_rad)
+        finger,transF=self.get_finger(top_hinge=True,bot_hinge=True,    \
+                                      finger_width=finger_width,finger_length=finger_length,    \
+                                      finger_curvature=finger_curvature,hinge_rad=hinge_rad)
+        base,transB=self.get_base(base_off=base_off,num_finger=num_finger,  \
+                                  finger_width=finger_width,base_rad=base_rad,hinge_rad=hinge_rad)
         
         root=Link(base,'base')
         for fid,TB in enumerate(transB):
@@ -333,7 +351,8 @@ if __name__=='__main__':
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
     actuator=ET.SubElement(root,'actuator')
-    link=gripper.get_robot(base_off=0.2,finger_width=0.2,finger_length=0.5,finger_curvature=-3.,num_finger=4)
+    link=gripper.get_robot(base_off=0.2,num_finger=3.2,num_segment=3.2,   \
+                           finger_width=0.2,finger_length=0.5,finger_curvature=-3.,hinge_rad=0.04)
     link.compile_gripper(body,asset,actuator,path)
     
     open(path+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())

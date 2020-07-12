@@ -7,22 +7,28 @@ import mujoco_py as mjc
 
 class Metric:
     #Note that all metrics are supposed to be maximized
-    def __init__(self):
-        pass
+    def __init__(self,OBJECT_DEPENDENT):
+        self.OBJECT_DEPENDENT=OBJECT_DEPENDENT
+    
+    def __reduce__(self):
+        return (self.__class__,(self.OBJECT_DEPENDENT,))
     
     def compute(self):
         raise RuntimeError('This is abstract super-class, use sub-class!')
     
 class MassMetric(Metric):
     #this is the mass of the gripper
-    OBJECT_DEPENDENT=False
+    def __init__(self):
+        Metric.__init__(self,False)
     
-    def __init__(self,controller):
+    def __reduce__(self):
+        return (self.__class__,())
+    
+    def compute(self,controller):
         if isinstance(controller,Controller):
             self.sim=controller.sim
         else: self.sim=controller
         
-    def compute(self):
         model=self.sim.model
         bid=model.body_names.index('base')
         mass=model.body_subtreemass[bid]
@@ -30,14 +36,17 @@ class MassMetric(Metric):
         
 class SizeMetric(Metric):
     #this is the surface area of the bounding box
-    OBJECT_DEPENDENT=False
+    def __init__(self):
+        Metric.__init__(self,False)
     
-    def __init__(self,controller):
+    def __reduce__(self):
+        return (self.__class__,())
+    
+    def compute(self,controller):
         if isinstance(controller,Controller):
             self.sim=controller.sim
         else: self.sim=controller
         
-    def compute(self):
         #compute bounding box
         vmin=[ 1000., 1000., 1000.]
         vmax=[-1000.,-1000.,-1000.]
@@ -90,77 +99,115 @@ class SizeMetric(Metric):
         
 class Q1Metric(Metric):
     #this is the grasp quality measured after close
-    OBJECT_DEPENDENT=True
-    FRICTION=0.7
+    def __init__(self,FRICTION=0.7):
+        Metric.__init__(self,True)
+        self.FRICTION=FRICTION
     
-    def __init__(self,controller):
+    def __reduce__(self):
+        return (self.__class__,(self.FRICTION,))
+    
+    def compute(self,controller,callback=False):
         self.controller=controller
         self.mMatrix=gm.Mat6d()
         self.mMatrix.setZero()
         for d in range(6):
             self.mMatrix[d,d]=1.0
-        
-    def compute(self,callback=False):
+            
         contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
         contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.Q1(Q1Metric.FRICTION,contact_poses,contact_normals,self.mMatrix,callback)
+        return gm.Q1(self.FRICTION,contact_poses,contact_normals,self.mMatrix,callback)
         
 class QInfMetric(Q1Metric):
     #this is the grasp quality measured after close
-    OBJECT_DEPENDENT=True
+    def __init__(self,FRICTION=0.7):
+        Metric.__init__(self,True)
+        self.FRICTION=FRICTION
     
-    def __init__(self,controller):
-        Q1Metric.__init__(self,controller)
-        
-    def compute(self,callback=False):
+    def __reduce__(self):
+        return (self.__class__,(self.FRICTION,))
+    
+    def compute(self,controller,callback=False):
+        self.controller=controller
+        self.mMatrix=gm.Mat6d()
+        self.mMatrix.setZero()
+        for d in range(6):
+            self.mMatrix[d,d]=1.0
+            
         contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
         contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QInf(Q1Metric.FRICTION,contact_poses,contact_normals,self.mMatrix,callback)
+        return gm.QInf(self.FRICTION,contact_poses,contact_normals,self.mMatrix,callback)
         
 class QMSVMetric(Q1Metric):
     #this is the grasp quality measured after close
-    OBJECT_DEPENDENT=True
+    def __init__(self,FRICTION=0.7):
+        Metric.__init__(self,True)
+        self.FRICTION=FRICTION
     
-    def __init__(self,controller):
-        Q1Metric.__init__(self,controller)
-        
-    def compute(self,callback=False):
+    def __reduce__(self):
+        return (self.__class__,(self.FRICTION,))
+    
+    def compute(self,controller,callback=False):
+        self.controller=controller
+        self.mMatrix=gm.Mat6d()
+        self.mMatrix.setZero()
+        for d in range(6):
+            self.mMatrix[d,d]=1.0
+            
         contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
         contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QMSV(Q1Metric.FRICTION,contact_poses,contact_normals)
+        return gm.QMSV(self.FRICTION,contact_poses,contact_normals)
    
 class QVEWMetric(Q1Metric):
     #this is the grasp quality measured after close
-    OBJECT_DEPENDENT=True
+    def __init__(self,FRICTION=0.7):
+        Metric.__init__(self,True)
+        self.FRICTION=FRICTION
     
-    def __init__(self,controller):
-        Q1Metric.__init__(self,controller)
-        
-    def compute(self,callback=False):
+    def __reduce__(self):
+        return (self.__class__,(self.FRICTION,))
+    
+    def compute(self,controller,callback=False):
+        self.controller=controller
+        self.mMatrix=gm.Mat6d()
+        self.mMatrix.setZero()
+        for d in range(6):
+            self.mMatrix[d,d]=1.0
+            
         contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
         contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QVEW(Q1Metric.FRICTION,contact_poses,contact_normals)
+        return gm.QVEW(self.FRICTION,contact_poses,contact_normals)
      
 class QG11Metric(Q1Metric):
     #this is the grasp quality measured after close
-    OBJECT_DEPENDENT=True
+    def __init__(self,FRICTION=0.7):
+        Metric.__init__(self,True)
+        self.FRICTION=FRICTION
     
-    def __init__(self,controller):
-        Q1Metric.__init__(self,controller)
-        
-    def compute(self,callback=False):
+    def __reduce__(self):
+        return (self.__class__,(self.FRICTION,))
+    
+    def compute(self,controller,callback=False):
+        self.controller=controller
+        self.mMatrix=gm.Mat6d()
+        self.mMatrix.setZero()
+        for d in range(6):
+            self.mMatrix[d,d]=1.0
+            
         contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
         contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QG11(Q1Metric.FRICTION,contact_poses,contact_normals)
+        return gm.QG11(self.FRICTION,contact_poses,contact_normals)
         
 class LiftMetric(Metric):
     #this metric measures whether the gripper can close, and then lift, and finally shake
-    OBJECT_DEPENDENT=True
+    def __init__(self):
+        Metric.__init__(self,True)
     
-    def __init__(self,controller):
+    def __reduce__(self):
+        return (self.__class__,())
+    
+    def compute(self,controller):
         self.controller=controller
         
-    def compute(self):
         score=0.0
         if self.controller.closed:
             score+=1
@@ -172,12 +219,15 @@ class LiftMetric(Metric):
 
 class ElapsedMetric(Metric):
     #this metric measures how much time can the current gripper grasp the object
-    OBJECT_DEPENDENT=True
+    def __init__(self):
+        Metric.__init__(self,True)
     
-    def __init__(self,controller):
+    def __reduce__(self):
+        return (self.__class__,())
+    
+    def compute(self,controller):
         self.controller=controller
         
-    def compute(self):
         dt=self.controller.sim.model.opt.timestep
         return self.controller.elapsed*dt
     
@@ -199,12 +249,12 @@ if __name__=='__main__':
         pass
     
     #compute mass metric
-    print('MassMetric=',MassMetric(controller).compute())
-    print('SizeMetric=',SizeMetric(controller).compute())
-    print('Q1Metric=',Q1Metric(controller).compute())
-    print('QInfMetric=',QInfMetric(controller).compute())
-    print('QMSVMetric=',QMSVMetric(controller).compute())
-    print('QVEWMetric=',QVEWMetric(controller).compute())
-    print('QG11Metric=',QG11Metric(controller).compute())
-    print('LiftMetric=',LiftMetric(controller).compute())
-    print('ElapsedMetric=',ElapsedMetric(controller).compute())
+    print('MassMetric=',MassMetric().compute(controller))
+    print('SizeMetric=',SizeMetric().compute(controller))
+    print('Q1Metric=',Q1Metric().compute(controller))
+    print('QInfMetric=',QInfMetric().compute(controller))
+    print('QMSVMetric=',QMSVMetric().compute(controller))
+    print('QVEWMetric=',QVEWMetric().compute(controller))
+    print('QG11Metric=',QG11Metric().compute(controller))
+    print('LiftMetric=',LiftMetric().compute(controller))
+    print('ElapsedMetric=',ElapsedMetric().compute(controller))

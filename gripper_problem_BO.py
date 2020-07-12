@@ -25,20 +25,23 @@ class GripperProblemBO(ProblemBO):
         self.gripper=Gripper()
         self.objects=objects
         
-        #vmin/vmax/vname
+        #vmin/vmax/vname/args0
         self.vmin=[]
         self.vmax=[]
         self.vname=[]
+        self.args0={}
         for designParam in design_space.split('|'):
             designParam=designParam.split(':')
             if len(designParam)!=2:
                 raise RuntimeError('Incorrect format for design_space!')
             minmax=designParam[1].split(',')
-            if len(minmax)!=2:
+            if len(minmax)!=1 and len(minmax)!=2:
                 raise RuntimeError('Incorrect format for design_space!')
-            self.vmin.append(float(minmax[0]))
-            self.vmax.append(float(minmax[1]))
-            self.vname.append(designParam[0])
+            if len(minmax)==2:
+                self.vmin.append(float(minmax[0]))
+                self.vmax.append(float(minmax[1]))
+                self.vname.append(designParam[0])
+            else: self.args0[designParam[0]]=float(minmax[0])
             
         #policy
         coordinates=[]
@@ -65,7 +68,7 @@ class GripperProblemBO(ProblemBO):
         self.init_dist=policy_space[3]
             
         #metric
-        self.metrics=[globals()[metricName] for metricName in metrics.split('|')]
+        self.metrics=[globals()[metricName]() for metricName in metrics.split('|')]
     
     def eval(self,points,parallel=True,remove_tmp=True):
         #gripper_metrics[pt_id][metric_id]
@@ -112,7 +115,7 @@ class GripperProblemBO(ProblemBO):
         return gripper_metrics,object_metrics
         
     def compute_gripper_dependent_metrics(self,pt):
-        args={}
+        args=self.args0
         for a,b,n,v in zip(self.vmin,self.vmax,self.vname,pt):
             if n=='theta':pass
             elif n=='phi':pass
@@ -131,7 +134,7 @@ class GripperProblemBO(ProblemBO):
         
         open(GripperProblemBO.DEFAULT_PATH+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
         model=mjc.load_model_from_path(GripperProblemBO.DEFAULT_PATH+'/gripper.xml')
-        return link,[0. if m.OBJECT_DEPENDENT else m(mjc.MjSim(model)).compute() for m in self.metrics]
+        return link,[0. if m.OBJECT_DEPENDENT else m.compute(mjc.MjSim(model)) for m in self.metrics]
     
     def compute_object_dependent_metrics(self,link,pt,policy):
         #create designed gripper
@@ -166,7 +169,7 @@ class GripperProblemBO(ProblemBO):
             ctrl.reset(id,self.init_pos(theta,phi),beta)
             while not ctrl.step():pass
             #print('Experimented!')
-            score_obj.append([m(ctrl).compute() if m.OBJECT_DEPENDENT else 0. for m in self.metrics])
+            score_obj.append([m.compute(ctrl) if m.OBJECT_DEPENDENT else 0. for m in self.metrics])
         return score_obj
 
     def init_pos(self,theta,phi):
@@ -231,12 +234,12 @@ if __name__=='__main__':
     
     #case II: optimize gripper as well as policy
     from dataset_cup import get_dataset_cup
-    domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
+    domain=GripperProblemBO(design_space='base_rad:0.25|base_off:0.2|finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
                             objects=get_dataset_cup(True),policy_space=[None,None,5,3.])
     print(domain)
     
     #test evaluating a single point
-    print(domain.eval([[0.4,0.,0.1,1.0]]))
+    print(domain.eval([[0.2,0.,0.1,math.pi/2*0.9]]))
     #test evaluating two points
     print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]]))
     #test evaluating two points, with the first point using different policy for each object

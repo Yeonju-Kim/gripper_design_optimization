@@ -10,7 +10,7 @@ class SingleObjectiveBOGPUCB:
         if nu is not None:
             kernel=Matern(nu=nu,length_scale=length_scale)
         else: kernel=RBF(length_scale=length_scale)
-        self.gp=GaussianProcessRegressor(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001)
+        self.gp=GaussianProcessRegressor(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001,normalize_y=True)
         self.problemBO=problemBO
         self.kappa=kappa
         if len(self.problemBO.metrics)>1:
@@ -83,7 +83,7 @@ class SingleObjectiveBOGPUCB:
         plt.ylim(vmin-vrng*eps,vmax+vrng*eps)
         return plt
 
-    def plot_func_1D(self,plt,eps,res):
+    def plot_func_1D(self,plt,eps,res,repeat):
         assert len(self.problemBO.vmin)==1
         fig,ax=plt.subplots()
         ln_pt,=plt.plot([],[],'o',label='Sample')
@@ -93,6 +93,7 @@ class SingleObjectiveBOGPUCB:
         
         gps=[]
         def init():
+            #range
             ax.set_xlim(self.problemBO.vmin[0],self.problemBO.vmax[0])
             vmin=np.array(self.scores).min()
             vmax=np.array(self.scores).max()
@@ -101,15 +102,17 @@ class SingleObjectiveBOGPUCB:
             return ln_pt,ln_mean,ln_sigma
         
         def update(frame):
+            if len(gps)==frame:
+                gps.append(copy.deepcopy(self.gp))
+                xdata=[self.points[i][0] for i in range(frame+1)]
+                ydata=[self.scores[i] for i in range(frame+1)]
+                gps[-1].fit(self.scale_01([[i] for i in xdata]),ydata)
             #sampled points
             xdata=[self.points[i][0] for i in range(frame+1)]
             ydata=[self.scores[i] for i in range(frame+1)]
             ln_pt.set_data(xdata,ydata)
             
             #predicted mean of GP
-            if len(gps)==frame:
-                gps.append(copy.deepcopy(self.gp))
-                gps[-1].fit(self.scale_01([[i] for i in xdata]),ydata)
             xdata=np.linspace(self.problemBO.vmin[0],self.problemBO.vmax[0],res).tolist()
             ydata,sdata=gps[frame].predict(self.scale_01(np.array([[i] for i in xdata])),return_std=True)
             ln_mean.set_data(xdata,ydata)
@@ -123,11 +126,11 @@ class SingleObjectiveBOGPUCB:
             return ln_pt,ln_mean,ln_sigma
         
         from matplotlib.animation import FuncAnimation
-        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=True)
+        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=True,repeat=repeat)
         plt.legend(loc='lower right')
         return plt,ani
 
-    def plot_func_2D(self,plt,eps,res):
+    def plot_func_2D(self,plt,eps,res,repeat):
         assert len(self.problemBO.vmin)==2
         coordinates=[np.linspace(vminVal,vmaxVal,res) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
         xsmesh,ysmesh=np.meshgrid(*coordinates)
@@ -144,6 +147,7 @@ class SingleObjectiveBOGPUCB:
         
         gps=[]
         def init():
+            #range
             ax.set_xlim3d(self.problemBO.vmin[0],self.problemBO.vmax[0])
             ax.set_ylim3d(self.problemBO.vmin[1],self.problemBO.vmax[1])
             vmin=np.array(self.scores).min()
@@ -153,6 +157,12 @@ class SingleObjectiveBOGPUCB:
             return ln_pt,ln_mean
         
         def update(frame):
+            if len(gps)==frame:
+                gps.append(copy.deepcopy(self.gp))
+                xdata=[self.points[i][0] for i in range(frame+1)]
+                ydata=[self.points[i][1] for i in range(frame+1)]
+                zdata=[self.scores[i] for i in range(frame+1)]
+                gps[-1].fit(self.scale_01([[x,y] for x,y in zip(xdata,ydata)]),zdata)
             #sampled points
             xdata=[self.points[i][0] for i in range(frame+1)]
             ydata=[self.points[i][1] for i in range(frame+1)]
@@ -163,26 +173,23 @@ class SingleObjectiveBOGPUCB:
             xsmesh=ln_mean._segments3d[:,:,0]
             ysmesh=ln_mean._segments3d[:,:,1]
             ptsmesh=np.array([dimi.flatten() for dimi in [xsmesh,ysmesh]]).T.tolist()
-            if len(gps)==frame:
-                gps.append(copy.deepcopy(self.gp))
-                gps[-1].fit(self.scale_01([[x,y] for x,y in zip(xdata,ydata)]),zdata)
             zsmesh=gps[frame].predict(self.scale_01(ptsmesh)).reshape(xsmesh.shape)
             ln_mean._segments3d=np.stack([xsmesh,ysmesh,zsmesh],axis=2)
             return ln_pt,ln_mean
 
         from matplotlib.animation import FuncAnimation
-        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=False)
+        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=False,repeat=repeat)
         plt.legend(loc='lower right')
         return plt,ani
 
-    def plot_func(self,plt,eps=0.1,res=32):
+    def plot_func(self,plt,eps=0.1,res=256,repeat=False):
         if len(self.problemBO.vmin)==1:
-            return self.plot_func_1D(plt,eps,res)
+            return self.plot_func_1D(plt,eps,res,repeat)
         elif len(self.problemBO.vmin)==2:
-            return self.plot_func_2D(plt,eps,res)
+            return self.plot_func_2D(plt,eps,res,repeat)
         else: raise RuntimeError('Plotting domain dimension > 2 is not supported!')
 
-def debug_toy_problem(BO,num_iter=10):
+def debug_toy_problem(BO,num_iter=10,repeat=False):
     path='../'+BO.name()+'.dat'
     if not os.path.exists(path):
         BO.run(num_iter=num_iter)
@@ -197,14 +204,14 @@ def debug_toy_problem(BO,num_iter=10):
     plt.show()
     plt.close()
     
-    _,ani=BO.plot_func(plt)
+    _,ani=BO.plot_func(plt,repeat)
     plt.show()
     plt.close()
 
 if __name__=='__main__':
-    #problem=Test1D1MProblemBO()
-    #BO=SingleObjectiveBOGPUCB(problem)
-    #debug_toy_problem(BO)
+    problem=Test1D1MProblemBO()
+    BO=SingleObjectiveBOGPUCB(problem)
+    debug_toy_problem(BO)
     
     problem=Test2D1MProblemBO()
     BO=SingleObjectiveBOGPUCB(problem)

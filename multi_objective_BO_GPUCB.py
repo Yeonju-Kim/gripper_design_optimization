@@ -7,7 +7,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         else: kernel=RBF(length_scale=length_scale)
         self.gp=[]
         for m in problemBO.metrics:
-            self.gp.append(GaussianProcessRegressor(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001))
+            self.gp.append(GaussianProcessRegressor(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001,normalize_y=True))
         self.problemBO=problemBO
         self.kappa=kappa
         if len(self.problemBO.metrics)==1:
@@ -77,7 +77,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         plt.ylim(vmin-vrng*eps,vmax+vrng*eps)
         return plt
     
-    def plot_func_1D(self,plt,eps,res):
+    def plot_func_1D(self,plt,eps,res,repeat):
         assert len(self.problemBO.vmin)==1
         fig,ax=plt.subplots()
         ln_pt=[plt.plot([],[],'o',label='Sample (%dth Metric)'%m)[0] for m in range(len(self.problemBO.metrics))]
@@ -87,6 +87,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         
         gps=[]
         def init():
+            #range
             ax.set_xlim(self.problemBO.vmin[0],self.problemBO.vmax[0])
             vmin=np.array(self.scores).min()
             vmax=np.array(self.scores).max()
@@ -121,11 +122,11 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
             return ln_pt,ln_mean,ln_sigma
         
         from matplotlib.animation import FuncAnimation
-        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=False)
+        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=False,repeat=repeat)
         plt.legend(loc='lower right')
         return plt,ani
 
-    def plot_func_2D(self,plt,eps,res):
+    def plot_func_2D(self,plt,eps,res,repeat):
         assert len(self.problemBO.vmin)==2
         coordinates=[np.linspace(vminVal,vmaxVal,res) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
         xsmesh,ysmesh=np.meshgrid(*coordinates)
@@ -142,6 +143,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         
         gps=[]
         def init():
+            #range
             ax.set_xlim3d(self.problemBO.vmin[0],self.problemBO.vmax[0])
             ax.set_ylim3d(self.problemBO.vmin[1],self.problemBO.vmax[1])
             vmin=np.array(self.scores).min()
@@ -174,7 +176,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
             return ln_pt,ln_mean
 
         from matplotlib.animation import FuncAnimation
-        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=False)
+        ani=FuncAnimation(fig,update,frames=[i for i in range(len(self.points))],init_func=init,blit=False,repeat=repeat)
         plt.legend(loc='lower right')
         return plt,ani
 
@@ -183,6 +185,6 @@ if __name__=='__main__':
     BO=MultiObjectiveBOGPUCB(problem)
     debug_toy_problem(BO)
     
-    #problem=Test2D2MProblemBO()
-    #BO=MultiObjectiveBOGPUCB(problem)
-    #debug_toy_problem(BO)
+    problem=Test2D2MProblemBO()
+    BO=MultiObjectiveBOGPUCB(problem)
+    debug_toy_problem(BO)
