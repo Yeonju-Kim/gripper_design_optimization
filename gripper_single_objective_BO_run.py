@@ -1,21 +1,19 @@
 from single_objective_BO_GPUCB import SingleObjectiveBOGPUCB
 from gripper_problem_BO import GripperProblemBO
-from compile_objects import auto_download
-
 import os
 
 plot=False
 test=True
 if __name__=='__main__':
     from dataset_cup import get_dataset_cup
-    domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='ElapsedMetric',
+    domain=GripperProblemBO(design_space='base_off:0.1,0.4|finger_length:0.2,0.6|finger_curvature:-6,6',metrics='ElapsedMetric',
                             objects=get_dataset_cup(True)[0:1],policy_space=[5,5,5,3.])
     BO=SingleObjectiveBOGPUCB(domain,nu=10.)
     
     #main loop
     path='../'+BO.name()+'.dat'
     if not os.path.exists(path):
-        BO.run(num_iter=10)
+        BO.run(num_iter=100)
         BO.save(path)
     else:
         BO.load(path)

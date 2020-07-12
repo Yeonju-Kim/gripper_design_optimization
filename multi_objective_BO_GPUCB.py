@@ -7,7 +7,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         else: kernel=RBF(length_scale=length_scale)
         self.gp=[]
         for m in problemBO.metrics:
-            self.gp.append(GaussianProcessRegressor(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001,normalize_y=True))
+            self.gp.append(GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001))
         self.problemBO=problemBO
         self.kappa=kappa
         if len(self.problemBO.metrics)==1:
@@ -59,20 +59,29 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
          
     def plot_iteration(self,plt,accumulate=False,eps=0.1):
         #plt
+        yssAll=[]
         for i in range(len(self.problemBO.metrics)):
             scores=np.array([s[i] for s in self.scores])
             if accumulate:
                 yss=np.maximum.accumulate(scores)
             else: yss=scores
             plt.plot(yss,'o-',label='Sampled points (%dth Metric)'%i)
+            yssAll.append(yss)
         plt.title('Multi-Objective '+self.name()+('-accumulate' if accumulate else ''))
         plt.legend(loc='lower right')
         plt.xlabel('Iteration')
         plt.ylabel('Metric')
         
         #range rescaled
-        vmin=scores.min()
-        vmax=scores.max()
+        vmin=None
+        vmax=None
+        for yss in yssAll:
+            if vmin is None:
+                vmin=yss.min()
+                vmax=yss.max()
+            else:
+                vmin=min(vmin,yss.min())
+                vmax=max(vmax,yss.max())
         vrng=vmax-vmin
         plt.ylim(vmin-vrng*eps,vmax+vrng*eps)
         return plt

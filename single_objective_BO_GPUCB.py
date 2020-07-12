@@ -1,6 +1,5 @@
-from compile_objects import auto_download
-from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic)
+from gaussian_process_scaled import GaussianProcessScaled
 import DIRECT,pickle,os,copy
 from problem_BO import *
 import numpy as np
@@ -10,7 +9,7 @@ class SingleObjectiveBOGPUCB:
         if nu is not None:
             kernel=Matern(nu=nu,length_scale=length_scale)
         else: kernel=RBF(length_scale=length_scale)
-        self.gp=GaussianProcessRegressor(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001,normalize_y=True)
+        self.gp=GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001)
         self.problemBO=problemBO
         self.kappa=kappa
         if len(self.problemBO.metrics)>1:
@@ -77,8 +76,8 @@ class SingleObjectiveBOGPUCB:
         plt.ylabel('Metric')
         
         #range rescaled
-        vmin=scores.min()
-        vmax=scores.max()
+        vmin=yss.min()
+        vmax=yss.max()
         vrng=vmax-vmin
         plt.ylim(vmin-vrng*eps,vmax+vrng*eps)
         return plt

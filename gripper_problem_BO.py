@@ -3,13 +3,13 @@ from compile_gripper import Gripper
 from compile_world import World
 from problem_BO import ProblemBO
 from controller import Controller
-import multiprocessing
 from metric import *
 import numpy as np
-import math,copy,os,shutil
+import math,copy,os,shutil,time,multiprocessing
 
 class GripperProblemBO(ProblemBO):
     NUMBER_PROCESS=max(1,multiprocessing.cpu_count()//2)
+    ONE_OBJECT_PER_WORLD=True
     DEFAULT_PATH='data'
     #design space can be policy-related or gripper-related:
     #policy-related variables are: theta,phi,beta
@@ -147,13 +147,20 @@ class GripperProblemBO(ProblemBO):
                 policy[2]=v
         
         #compile to MuJoCo
-        world=World()
-        world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects,link=link)
-        ctrl=Controller(world)
-        
+        if not GripperProblemBO.ONE_OBJECT_PER_WORLD:
+            world=World()
+            world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects,link=link)
+            ctrl=Controller(world)
+                
         #then compute object-dependent metrics:
         score_obj=[]
-        for id in range(len(world.names)):
+        for id in range(len(self.objects)):
+            #compile to MuJoCo
+            if GripperProblemBO.ONE_OBJECT_PER_WORLD:
+                world=World()
+                world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects[id:id+1],link=link)
+                ctrl=Controller(world)
+        
             #we support different policy for each object if: isinstance(policy[0/1/2],list)==True
             #we also support same policy over all objects if: isinstance(policy[0/1/2],list)==False
             theta=policy[0][id] if isinstance(policy[0],list) else policy[0]
@@ -166,7 +173,7 @@ class GripperProblemBO(ProblemBO):
             assert beta>=self.policy_vmin[2] and beta<=self.policy_vmax[2]
             
             #print('Using policy: (%f,%f,%f) for object %d!'%(theta,phi,beta,id))
-            ctrl.reset(id,self.init_pos(theta,phi),beta)
+            ctrl.reset(0 if GripperProblemBO.ONE_OBJECT_PER_WORLD else id,self.init_pos(theta,phi),beta)
             while not ctrl.step():pass
             #print('Experimented!')
             score_obj.append([m.compute(ctrl) if m.OBJECT_DEPENDENT else 0. for m in self.metrics])
@@ -239,7 +246,12 @@ if __name__=='__main__':
     print(domain)
     
     #test evaluating a single point
-    print(domain.eval([[0.2,0.,0.1,math.pi/2*0.9]]))
+    for ONE_OBJECT_PER_WORLD in [True,False]:
+        GripperProblemBO.ONE_OBJECT_PER_WORLD=ONE_OBJECT_PER_WORLD
+        start=time.time()
+        ret=domain.eval([[0.2,0.,0.1,math.pi/2*0.9]])
+        end=time.time()
+        print("ONE_OBJECT_PER_WORLD=%d, time=%s, result=%s"%(ONE_OBJECT_PER_WORLD,str(end-start),str(ret)))
     #test evaluating two points
     print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]]))
     #test evaluating two points, with the first point using different policy for each object
