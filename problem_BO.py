@@ -24,6 +24,18 @@ class Test1DMetric(Metric):
         noise=normal(loc=0,scale=Test1DMetric.NOISE)
         return (x**2*math.sin(5*math.pi*x)**6.0)+noise
 
+class ReversedTest1DMetric(Metric):
+    NOISE=0.1
+    
+    def __init__(self,pt):
+        self.pt=pt
+        
+    def compute(self):
+        x=1.-self.pt[0]
+        from numpy.random import normal
+        noise=normal(loc=0,scale=Test1DMetric.NOISE)
+        return (x**2*math.sin(5*math.pi*x)**6.0)+noise
+
 class Test2DMetric(Metric):
     NOISE=0.1
     
@@ -33,6 +45,20 @@ class Test2DMetric(Metric):
     def compute(self):
         x=self.pt[0]
         y=self.pt[1]
+        from numpy.random import normal
+        noise=normal(loc=0,scale=Test2DMetric.NOISE)
+        return (x**2*math.sin(5*math.pi*x)**6.0*
+                y**2*math.cos(5*math.pi*y)**6.0)+noise
+
+class ReversedTest2DMetric(Metric):
+    NOISE=0.1
+    
+    def __init__(self,pt):
+        self.pt=pt
+        
+    def compute(self):
+        x=1.-self.pt[0]
+        y=1.-self.pt[1]
         from numpy.random import normal
         noise=normal(loc=0,scale=Test2DMetric.NOISE)
         return (x**2*math.sin(5*math.pi*x)**6.0*
@@ -50,6 +76,19 @@ class Test1D1MProblemBO(ProblemBO):
     
     def name(self):
         return 'Test1D1MProblemBO'
+
+class Test1D2MProblemBO(ProblemBO):
+    def __init__(self):
+        self.vmin=[0.]
+        self.vmax=[1.]
+        self.vnames=['x']
+        self.metrics=[Test1DMetric,ReversedTest1DMetric]
+        
+    def eval(self,points):
+        return [[m(pt).compute() for m in self.metrics] for pt in points]
+    
+    def name(self):
+        return 'Test1D2MProblemBO'
     
 class Test2D1MProblemBO(ProblemBO):
     def __init__(self):
@@ -63,6 +102,19 @@ class Test2D1MProblemBO(ProblemBO):
     
     def name(self):
         return 'Test2D1MProblemBO'
+    
+class Test2D2MProblemBO(ProblemBO):
+    def __init__(self):
+        self.vmin=[0.,0.]
+        self.vmax=[1.,1.]
+        self.vnames=['x']
+        self.metrics=[Test2DMetric,ReversedTest2DMetric]
+        
+    def eval(self,points):
+        return [[m(pt).compute() for m in self.metrics] for pt in points]
+    
+    def name(self):
+        return 'Test2D2MProblemBO'
     
 class HyperVolumeTransformedProblemBO(ProblemBO):
     def __init__(self,inner,scale=1.):
@@ -87,4 +139,6 @@ class HyperVolumeTransformedProblemBO(ProblemBO):
     
 if __name__=='__main__':
     print(Test1D1MProblemBO().eval([[0.1],[0.2],[0.3]]))
+    print(Test1D2MProblemBO().eval([[0.1],[0.2],[0.3]]))
     print(Test2D1MProblemBO().eval([[0.1,0.7],[0.5,0.2],[0.3,0.6]]))
+    print(Test2D2MProblemBO().eval([[0.1,0.7],[0.5,0.2],[0.3,0.6]]))

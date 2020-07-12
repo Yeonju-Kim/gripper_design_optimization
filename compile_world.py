@@ -96,7 +96,7 @@ class World:
         
         #link
         if link is not None:
-            link.compile_gripper(body,asset,actuator,path,damping_gripper)
+            link.compile_gripper(body,asset,actuator,damping_gripper)
             self.link=link
         else: self.link=None
         return root

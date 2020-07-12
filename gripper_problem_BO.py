@@ -48,9 +48,13 @@ class GripperProblemBO(ProblemBO):
         for d in range(3):
             if policy_space[d] is not None:
                 css=[]
-                for i in range(policy_space[d]):
-                    alpha=(i+0.5)/policy_space[d]
-                    css.append(self.policy_vmin[d]*(1-alpha)+self.policy_vmax[d]*alpha)
+                if isinstance(policy_space[d],float):
+                    css.append(policy_space[d])
+                else:
+                    assert isinstance(policy_space[d],int)
+                    for i in range(policy_space[d]):
+                        alpha=(i+0.5)/policy_space[d]
+                        css.append(self.policy_vmin[d]*(1-alpha)+self.policy_vmax[d]*alpha)
                 coordinates.append(np.array(css))
             else: 
                 coordinates.append(np.linspace(0.,0.,1))
@@ -63,10 +67,10 @@ class GripperProblemBO(ProblemBO):
         #metric
         self.metrics=[globals()[metricName] for metricName in metrics.split('|')]
     
-    def eval(self,points):
+    def eval(self,points,parallel=True,remove_tmp=True):
         #gripper_metrics[pt_id][metric_id]
         #object_metrics[pt_id][policy_id][object_id][metric_id]
-        gripper_metrics,object_metrics=self.compute_metrics(points)
+        gripper_metrics,object_metrics=self.compute_metrics(points,parallel=parallel,remove_tmp=remove_tmp)
         #mean over objects, max over policies
         combined_metrics=np.array(gripper_metrics)+np.array(object_metrics).max(axis=1).mean(axis=1)
         return combined_metrics.tolist()

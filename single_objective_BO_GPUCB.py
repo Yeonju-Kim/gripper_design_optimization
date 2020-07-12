@@ -1,8 +1,8 @@
 from compile_objects import auto_download
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import (RBF, Matern, RationalQuadratic)
-from problem_BO import Test1D1MProblemBO,Test2D1MProblemBO
 import DIRECT,pickle,os,copy
+from problem_BO import *
 import numpy as np
 
 class SingleObjectiveBOGPUCB:
@@ -53,7 +53,7 @@ class SingleObjectiveBOGPUCB:
         pickle.dump((self.points,self.scores),open(filename,'wb'))
             
     def name(self):
-        return 'BO-GP-UCB('+self.problemBO.name()+')'
+        return 'SBO-GP-UCB('+self.problemBO.name()+')'
             
     def get_best(self):
         kappa_tmp=self.kappa
@@ -88,7 +88,7 @@ class SingleObjectiveBOGPUCB:
         fig,ax=plt.subplots()
         ln_pt,=plt.plot([],[],'o',label='Sample')
         ln_mean,=plt.plot([],[],'b-',label='Prediction')
-        ln_sigma,=plt.fill([],[],alpha=.5,fc='b',ec='None',label='95% confidence interval')
+        ln_sigma,=plt.fill([],[],alpha=.5,fc='b',ec='None',label='.95 confidence interval')
         ax.set_title('Single-Objective '+self.name())
         
         gps=[]
@@ -202,8 +202,6 @@ def debug_toy_problem(BO,num_iter=10):
     plt.close()
 
 if __name__=='__main__':
-    auto_download()
-    
     #problem=Test1D1MProblemBO()
     #BO=SingleObjectiveBOGPUCB(problem)
     #debug_toy_problem(BO)

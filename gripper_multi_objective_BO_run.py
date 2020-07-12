@@ -2,16 +2,16 @@ from single_objective_BO_GPUCB import SingleObjectiveBOGPUCB
 from gripper_problem_BO import GripperProblemBO
 from problem_BO import HyperVolumeTransformedProblemBO
 from compile_objects import auto_download
-import os
+import os,math
 
 plot=False
 test=True
 if __name__=='__main__':
     auto_download()
     
+    from dataset_cup import get_dataset_cup
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|Q1Metric',
-                            object_file_name='data/ObjectNet3D/CAD/off/cup/05.off',
-                            policy_space=[0.1,0.,2.,3.])
+                            objects=get_dataset_cup(True),policy_space=[0.1,math.pi/2*0.9,2.,3.])
     domain=HyperVolumeTransformedProblemBO(domain,scale=100.)
     BO=SingleObjectiveBOGPUCB(domain,nu=10.)
     
