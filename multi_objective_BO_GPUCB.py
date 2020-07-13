@@ -1,5 +1,24 @@
 from single_objective_BO_GPUCB import *
 
+def cmpToKey(mycmp):
+    'Convert a cmp= function into a key= function'
+    class K(object):
+        def __init__(self,obj,*args):
+            self.obj=obj
+        def __lt__(self,other):
+            return mycmp(self.obj,other.obj)<0
+        def __gt__(self,other):
+            return mycmp(self.obj,other.obj)>0
+        def __eq__(self,other):
+            return mycmp(self.obj,other.obj)==0
+        def __le__(self,other):
+            return mycmp(self.obj,other.obj)<=0  
+        def __ge__(self,other):
+            return mycmp(self.obj,other.obj)>=0
+        def __ne__(self,other):
+            return mycmp(self.obj,other.obj)!=0
+    return K
+
 class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
     def __init__(self,problemBO,kappa=10.,nu=None,length_scale=1.):
         if nu is not None:
@@ -193,11 +212,85 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         plt.legend(loc='lower right')
         return plt,ani
 
-if __name__=='__main__':
-    problem=Test1D2MProblemBO()
-    BO=MultiObjectiveBOGPUCB(problem)
-    debug_toy_problem(BO)
+    def build_pareto_front(self,num_grid):
+        coordinates=[np.linspace(vminVal,vmaxVal,num_grid) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
+        points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
+        on_front=[True for p in points]
+        #compute score
+        scores=[]
+        for m in range(len(self.problemBO.metrics)):
+            scores.append(self.gp[m].predict(self.scale_01(points)))
+        #prune
+        def govern(a,b):    #return if a govern bres
+            for m in range(len(self.problemBO.metrics)):
+                if scores[m][a]<=scores[m][b]:
+                    return False
+            return True
+        for i in range(len(on_front)):
+            for j in range(i):
+                if not on_front[i] or not on_front[j]:
+                    continue
+                elif govern(i,j):
+                    on_front[j]=False
+                elif govern(j,i):
+                    on_front[i]=False
+        #store
+        front=[]
+        for i in range(len(on_front)):
+            if on_front[i]:
+                front.append((points[i],[scores[m][i] for m in range(len(self.problemBO.metrics))]))
+        return front
     
-    problem=Test2D2MProblemBO()
+    def plot_front_2D(self,front):
+        #sort by polar angle
+        def get_polar(A):
+            x,y=A[1][0],A[1][1]
+            return math.atan2(y,x)
+        def cmp(A,B):
+            return get_polar(A)-get_polar(B)
+        front=sorted(front,key=cmpToKey(cmp))
+        
+        #plot
+        import matplotlib.pyplot as plt   
+        xss=[s[0] for p,s in front]
+        yss=[s[1] for p,s in front]
+        plt.plot(xss,yss,'o-',label='Sampled points')
+        plt.title('Pareto-Front 2D')
+        plt.legend(loc='lower right')
+        plt.xlabel(type(self.problemBO.metrics[0]).__name__)
+        plt.ylabel(type(self.problemBO.metrics[1]).__name__)
+        plt.show()
+    
+    def plot_front_3D(self,front):
+        #plot
+        import matplotlib.pyplot as plt   
+        xss=[s[0] for p,s in front]
+        yss=[s[1] for p,s in front]
+        zss=[s[2] for p,s in front]
+        ax=plt.axes(projection='3d')
+        ax.scatter(xss,yss,zss,'o',label='Sampled points')
+        ax.set_title('Pareto-Front 3D')
+        ax.legend(loc='lower right')
+        ax.set_xlabel(type(self.problemBO.metrics[0]).__name__)
+        ax.set_ylabel(type(self.problemBO.metrics[1]).__name__)
+        ax.set_zlabel(type(self.problemBO.metrics[2]).__name__)
+        plt.show()
+    
+    def plot_pareto_front(self,num_grid):
+        front=self.build_pareto_front(num_grid)
+        if len(self.problemBO.metrics)==2:
+            self.plot_front_2D(front)
+        elif len(self.problemBO.metrics)==3:
+            self.plot_front_3D(front)
+        else: raise RuntimeError('Plotting domain dimension > 2 is not supported!')
+
+if __name__=='__main__':
+    #problem=Test1D2MProblemBO()
+    #BO=MultiObjectiveBOGPUCB(problem)
+    #debug_toy_problem(BO)
+    #BO.plot_pareto_front(128)
+    
+    problem=Test2D3MProblemBO()
     BO=MultiObjectiveBOGPUCB(problem)
     debug_toy_problem(BO)
+    BO.plot_pareto_front(128)
