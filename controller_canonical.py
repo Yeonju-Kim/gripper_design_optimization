@@ -32,17 +32,17 @@ def test_dataset_canonical(design,policy,controller,ids,repeat=2):
                 return
     
 if __name__=='__main__':
-    #the need for positive curvature
-    design={'base_off':0.2,'finger_length':0.25,'finger_width':0.3,'finger_curvature':4.,'num_finger':3,'hinge_rad':0.01}
-    policy={'initial_pos':[0.1,0.,3.5],'axial_rotation':math.pi/2}
-    controller={'lift_height':2.5}
-    test_dataset_canonical(design,policy,controller,ids=[1])
-    
     #the need for negative curvature
     design={'base_off':0.2,'finger_length':0.25,'finger_width':0.3,'finger_curvature':-4.,'num_finger':3,'hinge_rad':0.04}
     policy={'initial_pos':[0.1,0.,3.5],'axial_rotation':math.pi/2}
     controller={'lift_height':2.5}
     test_dataset_canonical(design,policy,controller,ids=[0])
+    
+    #the need for positive curvature
+    design={'base_off':0.2,'finger_length':0.25,'finger_width':0.3,'finger_curvature':4.,'num_finger':3,'hinge_rad':0.01}
+    policy={'initial_pos':[0.1,0.,3.5],'axial_rotation':math.pi/2}
+    controller={'lift_height':2.5}
+    test_dataset_canonical(design,policy,controller,ids=[1])
     
     #negative curvature works for id=1 as well
     design={'base_off':0.2,'finger_length':0.25,'finger_width':0.3,'finger_curvature':-4.,'num_finger':3,'hinge_rad':0.04}
