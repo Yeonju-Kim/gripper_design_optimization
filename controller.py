@@ -48,7 +48,7 @@ class Controller:
             leaf_link_geom_ids+=leaf
         return link_geom_ids,leaf_link_geom_ids
     
-    def reset(self,id,initial_pos,axial_rotation):
+    def reset(self,id,initial_pos,axial_rotation,init_pose=[math.pi/2,0.],approach_coef=[1.,1.]):
         #we assume the gripper is always approaching from initial_pos to [0,0,0]
         self.world.test_object(id)
         state=self.sim.get_state()
@@ -65,7 +65,9 @@ class Controller:
         self.target_vel=[v*self.approach_vel for v in v1.tolist()]
         self.target_dir=v1
         
-        self.link.set_PD_target(self.target_pos+self.target_rot+[math.pi/2,0.0],state=state)
+        self.init_pose=init_pose
+        self.approach_coef=approach_coef
+        self.link.set_PD_target(self.target_pos+self.target_rot+self.init_pose,state=state)
         self.sim.set_state(state)
         self.approached=False
         self.closed=False
@@ -135,7 +137,7 @@ class Controller:
         state=self.sim.get_state()
         pos=np.array([state.qpos[self.link.joint_ids[d]] for d in range(3)])
         pos=(pos.dot(self.target_dir)*self.target_dir).tolist()
-        x=[p+v for p,v in zip(pos,self.target_vel)]+self.target_rot+[math.pi/2,0]
+        x=[p+v for p,v in zip(pos,self.target_vel)]+self.target_rot+self.init_pose
         vx=self.target_vel+[0,0,0]+[0,0]
         self.link.set_PD_target(x,vx)
         self.link.define_ctrl(self.sim,state.qpos,state.qvel)
@@ -155,8 +157,8 @@ class Controller:
     def close(self):
         state=self.sim.get_state()
         qpos=self.link.fetch_q(state.qpos)
-        x=self.x_approached[0:6]+[qpos[6]-self.approach_vel,qpos[7]-self.approach_vel]
-        vx=[0 for i in range(6)]+[-self.approach_vel,-self.approach_vel]
+        x=self.x_approached[0:6]+[qpos[6]-self.approach_vel*self.approach_coef[0],qpos[7]-self.approach_vel*self.approach_coef[1]]
+        vx=[0 for i in range(6)]+[-self.approach_vel*self.approach_coef[0],-self.approach_vel*self.approach_coef[1]]
         self.link.set_PD_target(x,vx)
         self.link.define_ctrl(self.sim,state.qpos,state.qvel)
     
@@ -176,9 +178,10 @@ class Controller:
         
     def lift(self):
         state=self.sim.get_state()
-        height=self.link.fetch_q(state.qpos)[2]
-        x=self.x_closed[0:8]
-        vx=[0 for i in range(6)]+[-self.lift_vel,-self.lift_vel]
+        qpos=self.link.fetch_q(state.qpos)
+        height=qpos[2]
+        x=self.x_closed[0:6]+[qpos[6]-self.approach_vel*self.approach_coef[0],qpos[7]-self.approach_vel*self.approach_coef[1]]
+        vx=[0 for i in range(6)]+[-self.approach_vel*self.approach_coef[0],-self.approach_vel*self.approach_coef[1]]
         vx[2]=self.lift_vel
         x[2]=height+vx[2]
         self.link.set_PD_target(x,vx)
@@ -211,7 +214,9 @@ class Controller:
         pos0+=srng*(pos.dot(srng)+len*sgn)
         x[0:3]=pos0.tolist()
         
-        vx=[0 for i in range(6)]+[-self.lift_vel,-self.lift_vel]
+        qpos=self.link.fetch_q(state.qpos)
+        x[6:8]=[qpos[6]-self.approach_vel*self.approach_coef[0],qpos[7]-self.approach_vel*self.approach_coef[1]]
+        vx=[0 for i in range(6)]+[-self.approach_vel*self.approach_coef[0],-self.approach_vel*self.approach_coef[1]]
         vx[0:3]=[v*sgn*self.shake_vel for v in srng]
         self.link.set_PD_target(x,vx)
         self.link.define_ctrl(self.sim,state.qpos,state.qvel)

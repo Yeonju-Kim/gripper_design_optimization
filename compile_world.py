@@ -108,7 +108,7 @@ class World:
                 minZ=min(model.mesh_vert[vid][2],minZ)
         if minZ>=10000.0:
             minZ=0.
-        return minZ-0.2
+        return minZ-0.1
         
     def get_sim_info(self):
         if self.names is not None:

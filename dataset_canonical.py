@@ -65,13 +65,13 @@ def canonical_cup(name,base,vss,thick=0.02):
     return name,ret
 
 def cup1():
-    return canonical_cup('cup1',0.15,[(0.05,0,0.35)])
+    return canonical_cup('cup1',0.12,[(0.05,0,0.35)])
 
 def cup2():
-    return canonical_cup('cup2',0.15,[(0,0,0.35)])
+    return canonical_cup('cup2',0.12,[(0,0,0.35)])
 
 def cup3():
-    return canonical_cup('cup3',0.15,[(-0.05,0,0.35)])
+    return canonical_cup('cup3',0.20,[(-0.07,0,0.35)])
 
 def canonical_valley(name,base,vss,basey=None,thick=0.02):
     ret=[]
