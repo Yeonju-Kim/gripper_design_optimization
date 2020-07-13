@@ -119,23 +119,30 @@ def get_dataset_cup(use_surrogate):
         objs=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
     return objs
 
-def compare_debug(sur,sep):
+def compare_debug(sur,sep,groundtruth=False):
     path='data/'
     root=ET.Element('mujoco')
     set_simulator_option(root)
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
-    object_list=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
+    if groundtruth:
+        auto_download()
+        object_list=glob.glob('data/ObjectNet3D/CAD/off/cup/[0-9][0-9].off')
+    create_fog(root)
+    create_skybox(asset)
+    create_floor(asset,body,pos=[0,0,-.5])
+    create_light(body)
     
     for id in range(len(sur)):
-        b=ET.SubElement(body,'body')
-        compile_body('Real'+str(id),b,asset,object_list[id],collision=False)
-        joint=ET.SubElement(b,'joint')
-        joint.set('axis','1 0 0')
-        joint.set('type','slide')
-        joint=ET.SubElement(b,'joint')
-        joint.set('axis','0 1 0')
-        joint.set('type','slide')
+        if groundtruth:
+            b=ET.SubElement(body,'body')
+            compile_body('Real'+str(id),b,asset,object_list[id],collision=False)
+            joint=ET.SubElement(b,'joint')
+            joint.set('axis','1 0 0')
+            joint.set('type','slide')
+            joint=ET.SubElement(b,'joint')
+            joint.set('axis','0 1 0')
+            joint.set('type','slide')
         
         b=ET.SubElement(body,'body')
         compile_body('Surrogate'+str(id),b,asset,sur[id]('Surrogate'+str(id)),collision=False)
@@ -153,17 +160,20 @@ def compare_debug(sur,sep):
     
     state=sim.get_state()
     for id in range(len(sur)):
-        state.qpos[id*4+0]=id*sep
-        state.qpos[id*4+1]=0
-        state.qpos[id*4+2]=id*sep
-        state.qpos[id*4+3]=sep
+        if groundtruth:
+            state.qpos[id*4+0]=id*sep
+            state.qpos[id*4+1]=0
+            state.qpos[id*4+2]=id*sep
+            state.qpos[id*4+3]=sep
+        else:
+            state.qpos[id*2+0]=id*sep
+            state.qpos[id*2+1]=0
     sim.set_state(state)
     while True:
         sim.step()
         viewer.render()
 
 if __name__=='__main__':
-    auto_download()
     compare_debug([surrogate_object_05, \
                    surrogate_object_03, \
                    surrogate_object_07, \

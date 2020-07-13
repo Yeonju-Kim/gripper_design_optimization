@@ -347,12 +347,15 @@ if __name__=='__main__':
     if not os.path.exists(path):
         os.mkdir(path)
     root=ET.Element('mujoco')
+    sz=ET.SubElement(root,'size')
+    sz.set('njmax','8000')
+    sz.set('nconmax','4000')
     set_simulator_option(root)
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
     actuator=ET.SubElement(root,'actuator')
     link=gripper.get_robot(base_off=0.2,num_finger=3.2,num_segment=3.2,   \
-                           finger_width=0.2,finger_length=0.5,finger_curvature=-3.,hinge_rad=0.04)
+                           finger_width=0.2,finger_length=0.2,finger_curvature=-3.,hinge_rad=0.06)
     link.compile_gripper(body,asset,actuator,path)
     
     open(path+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
@@ -362,7 +365,7 @@ if __name__=='__main__':
     viewer=mjc.MjViewer(sim)
     
     state=sim.get_state()
-    link.set_PD_target([0.0 for i in range(6)]+[0.5,-0.1])
+    link.set_PD_target([0.0 for i in range(6)]+[-0.5,0.0])
     while True:
         state=sim.get_state()
         link.define_ctrl(sim,state.qpos,state.qvel)

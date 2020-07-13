@@ -7,13 +7,13 @@ def canonical_pole(name,base,rad,len,thick=0.02):
     return name,ret
 
 def pole_thin():
-    return canonical_pole('poleThin',0.3,0.02,0.25)
+    return canonical_pole('poleThin',0.3,0.02,0.35)
 
 def pole_mid():
-    return canonical_pole('poleMid',0.3,0.03,0.25)
+    return canonical_pole('poleMid',0.3,0.03,0.35)
 
 def pole_thick():
-    return canonical_pole('poleThick',0.3,0.06,0.25)
+    return canonical_pole('poleThick',0.3,0.06,0.35)
 
 def canonical_handle(name,base,rad,height,nr,thick=0.02):
     ret=[]
@@ -26,13 +26,13 @@ def canonical_handle(name,base,rad,height,nr,thick=0.02):
     return name,ret
     
 def single_handle():
-    return canonical_handle('singleHandle',0.15,0.02,0.25,1)
+    return canonical_handle('singleHandle',0.15,0.02,0.35,1)
 
 def two_handle():
-    return canonical_handle('twoHandle',0.15,0.02,0.25,2)
+    return canonical_handle('twoHandle',0.15,0.02,0.35,2)
 
 def three_handle():
-    return canonical_handle('threeHandle',0.15,0.02,0.25,3)
+    return canonical_handle('threeHandle',0.15,0.02,0.35,3)
 
 def canonical_board(name,base,rad,height,nr,thick=0.02):
     ret=[]
@@ -43,13 +43,13 @@ def canonical_board(name,base,rad,height,nr,thick=0.02):
     return name,ret
 
 def single_board():
-    return canonical_board('singleBoard',0.15,0.01,0.25,1)
+    return canonical_board('singleBoard',0.15,0.01,0.35,1)
 
 def two_board():
-    return canonical_board('twoBoard',0.15,0.01,0.25,2)
+    return canonical_board('twoBoard',0.15,0.01,0.35,2)
 
 def three_board():
-    return canonical_board('threeBoard',0.15,0.01,0.25,3)
+    return canonical_board('threeBoard',0.15,0.01,0.35,3)
 
 def canonical_cup(name,base,vss,thick=0.02):
     ret=[]
@@ -65,13 +65,13 @@ def canonical_cup(name,base,vss,thick=0.02):
     return name,ret
 
 def cup1():
-    return canonical_cup('cup1',0.15,[(0.05,0,0.25)])
+    return canonical_cup('cup1',0.15,[(0.05,0,0.35)])
 
 def cup2():
-    return canonical_cup('cup2',0.15,[(0,0,0.25)])
+    return canonical_cup('cup2',0.15,[(0,0,0.35)])
 
 def cup3():
-    return canonical_cup('cup3',0.15,[(-0.05,0,0.25)])
+    return canonical_cup('cup3',0.15,[(-0.05,0,0.35)])
 
 def canonical_valley(name,base,vss,basey=None,thick=0.02):
     ret=[]
@@ -105,16 +105,16 @@ def canonical_valley(name,base,vss,basey=None,thick=0.02):
     return name,ret
 
 def valley1():
-    return canonical_valley('valley1',0.15,[(0.05,0,0.25)])
+    return canonical_valley('valley1',0.15,[(0.05,0,0.35)])
 
 def valley2():
-    return canonical_valley('valley2',0.15,[(0,0,0.25)])
+    return canonical_valley('valley2',0.15,[(0,0,0.35)])
 
 def valley3():
-    return canonical_valley('valley3',0.15,[(-0.05,0,0.25)])
+    return canonical_valley('valley3',0.15,[(-0.05,0,0.35)])
 
 def valley4():
-    return canonical_valley('valley4',0.15,[(-0.14,0,0.25)],0.1)
+    return canonical_valley('valley4',0.15,[(-0.14,0,0.35)],0.1)
 
 def canonical_table(name,base,rad,height,slice,thick=0.02):
     ret=[]
@@ -124,10 +124,10 @@ def canonical_table(name,base,rad,height,slice,thick=0.02):
     return name,ret
 
 def table1():
-    return canonical_table('table1',0.05,0.15,0.25,32)
+    return canonical_table('table1',0.05,0.15,0.35,32)
 
 def table2():
-    return canonical_table('table2',0.05,0.2,0.25,4)
+    return canonical_table('table2',0.05,0.2,0.35,4)
 
 def visualize_debug(obj,sep):
     path='data/'
@@ -135,6 +135,10 @@ def visualize_debug(obj,sep):
     set_simulator_option(root)
     asset=ET.SubElement(root,'asset')
     body=ET.SubElement(root,'worldbody')
+    create_fog(root)
+    create_skybox(asset)
+    create_floor(asset,body)
+    create_light(body)
     
     for oFunc in obj:
         b=ET.SubElement(body,'body')
