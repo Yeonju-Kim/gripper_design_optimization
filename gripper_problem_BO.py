@@ -132,6 +132,8 @@ class GripperProblemBO(ProblemBO):
         link=self.gripper.get_robot(**args)
         link.compile_gripper(body,asset,actuator)
         
+        if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
+            os.mkdir(GripperProblemBO.DEFAULT_PATH)
         open(GripperProblemBO.DEFAULT_PATH+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
         model=mjc.load_model_from_path(GripperProblemBO.DEFAULT_PATH+'/gripper.xml')
         return link,[0. if m.OBJECT_DEPENDENT else m.compute(mjc.MjSim(model)) for m in self.metrics]
@@ -192,7 +194,7 @@ class GripperProblemBO(ProblemBO):
         #compile to MuJoCo
         world=World()
         link,_=self.compute_gripper_dependent_metrics(point)
-        world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,object_file_name=self.object_file_name,link=link)
+        world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects,link=link)
         ctrl=Controller(world)
 
         viewer=mjc.MjViewer(world.sim)

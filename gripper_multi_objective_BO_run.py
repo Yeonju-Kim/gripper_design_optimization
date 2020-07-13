@@ -33,5 +33,5 @@ if __name__=='__main__':
     
     #plot best gripper design
     if test:
-        sol=BO.get_best()
+        sol=BO.get_best_on_metric(1)
         domain.plot_solution(sol,metric_id=0)

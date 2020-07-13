@@ -79,7 +79,13 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         
     def name(self):
         return 'MBO-GP-UCB('+self.problemBO.name()+')'
-         
+                 
+    def get_best_on_metric(self,id):
+        def obj(x,user_data):
+            return -self.gp[id].predict(self.scale_01([x])),0
+        point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax)
+        return point
+
     def plot_iteration(self,plt,accumulate=False,eps=0.1):
         #plt
         yssAll=[]
