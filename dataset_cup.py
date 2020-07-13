@@ -132,11 +132,12 @@ def compare_debug(sur,sep,groundtruth=False):
     create_skybox(asset)
     create_floor(asset,body,pos=[0,0,-.5])
     create_light(body)
+    create_material(asset)
     
     for id in range(len(sur)):
         if groundtruth:
             b=ET.SubElement(body,'body')
-            compile_body('Real'+str(id),b,asset,object_list[id],collision=False)
+            compile_body('Real'+str(id),b,asset,object_list[id],collision=False,material='geom')
             joint=ET.SubElement(b,'joint')
             joint.set('axis','1 0 0')
             joint.set('type','slide')
@@ -145,7 +146,7 @@ def compare_debug(sur,sep,groundtruth=False):
             joint.set('type','slide')
         
         b=ET.SubElement(body,'body')
-        compile_body('Surrogate'+str(id),b,asset,sur[id]('Surrogate'+str(id)),collision=False)
+        compile_body('Surrogate'+str(id),b,asset,sur[id]('Surrogate'+str(id)),collision=False,material='geom')
         joint=ET.SubElement(b,'joint')
         joint.set('axis','1 0 0')
         joint.set('type','slide')

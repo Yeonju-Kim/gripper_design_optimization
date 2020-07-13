@@ -139,11 +139,12 @@ def visualize_debug(obj,sep):
     create_skybox(asset)
     create_floor(asset,body)
     create_light(body)
+    create_material(asset)
     
     for oFunc in obj:
         b=ET.SubElement(body,'body')
         name,geom=oFunc()
-        compile_body(name,b,asset,geom,collision=False)
+        compile_body(name,b,asset,geom,collision=False,material='geom')
         joint=ET.SubElement(b,'joint')
         joint.set('axis','1 0 0')
         joint.set('type','slide')

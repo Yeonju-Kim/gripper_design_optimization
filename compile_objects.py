@@ -73,6 +73,25 @@ def create_light(worldbody,pos=[0,0,10],dir=[0,0,-1]):
     light.set('pos',str(pos[0])+' '+str(pos[1])+' '+str(pos[2]))
     light.set('dir',str(dir[0])+' '+str(dir[1])+' '+str(dir[2]))
 
+def create_material(asset):
+    #texture
+    texture=ET.SubElement(asset,'texture')
+    texture.set('name','texgeom')
+    texture.set('type','cube')
+    texture.set('builtin','flat')
+    texture.set('mark','cross')
+    texture.set('width','127')
+    texture.set('height','127')
+    texture.set('rgb1','.8 .6 .4')
+    texture.set('rgb2','.8 .6 .4')
+    texture.set('markrgb','1 1 1')
+    texture.set('random','0.01')
+    #material
+    material=ET.SubElement(asset,'material')
+    material.set('name','geom')
+    material.set('texture','texgeom')
+    material.set('texuniform','true')
+
 def set_simulator_option(root,dt=0.001,withparent=True):
     #<option timestep='0.002' iterations="50" solver="PGS">
     #    <flag energy="enable"/>

@@ -35,23 +35,7 @@ class World:
     def compile_objects(self,objects,asset,body,damping,scale_obj):
         #<texture name="texgeom" type="cube" builtin="flat" mark="cross" width="127" height="127" rgb1="0.8 0.6 0.4" rgb2="0.8 0.6 0.4" markrgb="1 1 1" random="0.01"/>  
         #<material name='geom' texture="texgeom" texuniform="true"/>
-        #texture
-        texture=ET.SubElement(asset,'texture')
-        texture.set('name','texgeom')
-        texture.set('type','cube')
-        texture.set('builtin','flat')
-        texture.set('mark','cross')
-        texture.set('width','127')
-        texture.set('height','127')
-        texture.set('rgb1','.8 .6 .4')
-        texture.set('rgb2','.8 .6 .4')
-        texture.set('markrgb','1 1 1')
-        texture.set('random','0.01')
-        #material
-        material=ET.SubElement(asset,'material')
-        material.set('name','geom')
-        material.set('texture','texgeom')
-        material.set('texuniform','true')
+        create_material(asset)
         #object
         if objects is not None:
             self.names=[]
