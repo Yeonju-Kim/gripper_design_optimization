@@ -18,7 +18,10 @@ class GripperProblemBO(ProblemBO):
     #metric can be object-dependent or object-independent:
     #object-dependent metrics will be first maximized for each object, then taken mean over all objects
     #object-independent metrics will be computed for each gripper
-    def __init__(self,*,design_space,metrics,objects,policy_space={}):
+    def __init__(self,*,design_space,metrics,objects,policy_space):
+        from collections import OrderedDict
+        design_space=OrderedDict(design_space)
+        policy_space=OrderedDict(policy_space)
         if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
             os.mkdir(GripperProblemBO.DEFAULT_PATH)
         print('Initializing Domain, multi-threaded evaluation using %d processes!'%GripperProblemBO.NUMBER_PROCESS)
@@ -32,19 +35,15 @@ class GripperProblemBO(ProblemBO):
         self.vpolicyid=[]
         self.mimic={}
         self.args0={}
-        for designParam in design_space.split('|'):
-            designParam=designParam.split(':')
-            if len(designParam)!=2:
+        for designParam,minmax in design_space.items():
+            if not isinstance(minmax,tuple) and not isinstance(minmax,float):
                 raise RuntimeError('Incorrect format for design_space!')
-            minmax=designParam[1].split(',')
-            if len(minmax)!=1 and len(minmax)!=2:
-                raise RuntimeError('Incorrect format for design_space!')
-            if len(minmax)==2:
+            elif isinstance(minmax,tuple):
                 self.vmin.append(float(minmax[0]))
                 self.vmax.append(float(minmax[1]))
-                self.vname.append(designParam[0])
+                self.vname.append(designParam)
                 self.vpolicyid.append(-1)
-            else: self.args0[designParam[0]]=float(minmax[0])
+            else: self.args0[designParam]=float(minmax)
             
         #policy
         coordinates=[]
@@ -88,7 +87,7 @@ class GripperProblemBO(ProblemBO):
         self.policies=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             
         #metric
-        self.metrics=[globals()[metricName]() for metricName in metrics.split('|')]
+        self.metrics=metrics
     
     def eval(self,points,parallel=True,remove_tmp=True):
         #gripper_metrics[pt_id][metric_id]
@@ -240,18 +239,24 @@ class GripperProblemBO(ProblemBO):
 if __name__=='__main__':
     from dataset_cup import get_dataset_cup
     #case I: only optimize gripper
-    domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='MassMetric|Q1Metric',
-                            objects=get_dataset_cup(True),policy_space={'theta':10,'phi':5,'beta':10,'init_dist':3.})
+    domain=GripperProblemBO(design_space=[('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))],
+                            metrics=[MassMetric(),Q1Metric()],
+                            objects=get_dataset_cup(True),
+                            policy_space=[('theta',10),('phi',5),('beta',10),('init_dist',3.)])
     print(domain)
     
     #case II: optimize gripper as well as policy
-    domain=GripperProblemBO(design_space='base_rad:0.25|base_off:0.2|finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
-                            objects=get_dataset_cup(True),policy_space={'theta':None,'phi':('theta',1.5),'beta':10,'init_dist':3.})
+    domain=GripperProblemBO(design_space=[('base_rad',0.25),('base_off',0.2),('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))],
+                            metrics=[SizeMetric(),ElapsedMetric()],
+                            objects=get_dataset_cup(True),
+                            policy_space=[('theta',None),('phi',('theta',1.5)),('beta',10),('init_dist',3.)])
     print(domain)
     
     #case II: another case
-    domain=GripperProblemBO(design_space='base_rad:0.25|base_off:0.2|finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
-                            objects=get_dataset_cup(True),policy_space={'theta':None,'phi':None,'beta':10,'init_dist':3.,'grasp_dir':1.})
+    domain=GripperProblemBO(design_space=[('base_rad',0.25),('base_off',0.2),('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))],
+                            metrics=[SizeMetric(),ElapsedMetric()],
+                            objects=get_dataset_cup(True),
+                            policy_space=[('theta',None),('phi',None),('beta',10),('init_dist',3.),('grasp_dir',1.)])
     print(domain)
     
     #test evaluating two points

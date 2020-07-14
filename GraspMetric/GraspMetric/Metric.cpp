@@ -86,6 +86,7 @@ scalarD Q1Metric::computeMetric(scalarD* LB,scalarD* UB,const IDSET& ids,bool di
   }
   //incremental convex hull computation
 #ifdef CGAL_SUPPORT
+  //std::cout << "Using CGAL" << std::endl;
   CGALConvexHull<DIM> hull;
   typename CGALConvexHull<DIM>::PTS pss;
 #elif defined(QHULL_SUPPORT)
@@ -105,8 +106,8 @@ scalarD Q1Metric::computeMetric(scalarD* LB,scalarD* UB,const IDSET& ids,bool di
     //update Q
     typename ConvexHull<DIM>::PT blockingPN;
     Q=hull.distToOrigin(blockingPN);
-    if(Q<=0)
-      return 0;
+    //if(Q<=0)
+    //  return 0;
     if(LB && Q>*LB) //early stop condition
       break;
     //update convex hull
@@ -119,7 +120,7 @@ scalarD Q1Metric::computeMetric(scalarD* LB,scalarD* UB,const IDSET& ids,bool di
       _fssSols.assign(1,Cold::Zero((sizeType)ids.size()*3));
       return ScalarUtil<scalarD>::scalar_max();
     }
-    if(dist-Q<_thres*Q) //stopping criterion
+    if(dist-Q<_thres*std::abs(Q)) //stopping criterion
       break;
     pt=ConvexHull<DIM>::mul(basis,_wssSols.back());
     if(UB && pt.norm()<*UB) //early stop condition

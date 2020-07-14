@@ -135,29 +135,45 @@ SupportQ1Analytic::SupportQ1Analytic(std::shared_ptr<GraspMesh> mesh,const Matd&
 scalarD SupportQ1Analytic::supportPoint(const Vec6d& d,const IDSET& ids,bool directed)
 {
   scalarD ret=0;
+  _wOut.setZero(6);
+  Vec6d dm=_metricSqrt*d;
   for(IDSET::const_iterator beg=ids.begin(),end=ids.end(); beg!=end; beg++) {
     Eigen::Block<const Matd,6,3> G=_mesh->getG(*beg);
     Vec3d n=_mesh->inNormal(*beg);
-    scalarD wPerp=d.dot(_metricSqrt*G*n);
-    scalarD wPara=(d.transpose()*(_metricSqrt*G*(Mat3d::Identity()-n*n.transpose()))).norm();
-    if(_mesh->theta()*wPerp>wPara)
-      ret=std::max(ret,wPerp+wPara*wPara/wPerp);
-    else ret=std::max(ret,std::max<scalarD>(0,wPerp+_mesh->theta()*wPara));
+    Vec3d dmG=G.transpose()*dm;
+    scalarD wPerp=dmG.dot(n);
+    Vec3d dmGt=dmG-wPerp*n;
+    scalarD wPara=dmGt.norm();
+    scalarD val=std::max<scalarD>(0,wPerp+_mesh->theta()*wPara);
+    if(val>ret) {
+      ret=val;
+      _wOut=G*(n+dmGt*_mesh->theta()/std::max<scalarD>(wPara,1e-6f));
+    }
   }
+  _wOut=_metricSqrt*_wOut;
+  _errorFlag=0;
   return ret;
 }
 SupportQInfAnalytic::SupportQInfAnalytic(std::shared_ptr<GraspMesh> mesh,const Matd& metric,const Mat6d& metricSqrt):Support(mesh,metric,metricSqrt) {}
 scalarD SupportQInfAnalytic::supportPoint(const Vec6d& d,const IDSET& ids,bool directed)
 {
   scalarD ret=0;
+  _wOut.setZero(6);
+  Vec6d dm=_metricSqrt*d;
   for(IDSET::const_iterator beg=ids.begin(),end=ids.end(); beg!=end; beg++) {
     Eigen::Block<const Matd,6,3> G=_mesh->getG(*beg);
     Vec3d n=_mesh->inNormal(*beg);
-    scalarD wPerp=d.dot(_metricSqrt*G*n);
-    scalarD wPara=(d.transpose()*(_metricSqrt*G*(Mat3d::Identity()-n*n.transpose()))).norm();
-    if(_mesh->theta()*wPerp>wPara)
-      ret+=wPerp+wPara*wPara/wPerp;
-    else ret+=std::max<scalarD>(0,wPerp+_mesh->theta()*wPara);
+    Vec3d dmG=G.transpose()*dm;
+    scalarD wPerp=dmG.dot(n);
+    Vec3d dmGt=dmG-wPerp*n;
+    scalarD wPara=dmGt.norm();
+    scalarD val=wPerp+_mesh->theta()*wPara;
+    if(val>0) {
+      ret+=val;
+      _wOut+=G*(n+dmGt*_mesh->theta()/std::max<scalarD>(wPara,1e-6f));
+    }
   }
+  _wOut=_metricSqrt*_wOut;
+  _errorFlag=0;
   return ret;
 }

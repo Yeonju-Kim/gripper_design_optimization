@@ -47,7 +47,7 @@ scalarD SupportQ1SCS::supportPoint(const Vec6d& d,const IDSET& ids,bool directed
     return ScalarUtil<scalarD>::scalar_max();
   }
   _fOut=_fx.segment(0,(sizeType)ids.size()*3);
-  _wOut=_fx.segment<6>((sizeType)ids.size()*3);
+  _wOut=_metricSqrt*_fx.segment<6>((sizeType)ids.size()*3);
   return -c.dot(_fx);
 }
 void SupportQ1SCS::fNormConstraint(const IDSET& ids)
@@ -121,7 +121,7 @@ scalarD SupportQSMSCS::supportPoint(const Vec6d& d,const IDSET& ids,bool directe
         //fetch force
         _fOut=_fx.segment(0,(sizeType)ids.size()*3);
         //fetch
-        _wOut=_fx.segment<6>((sizeType)ids.size()*3);
+        _wOut=_metricSqrt*_fx.segment<6>((sizeType)ids.size()*3);
         //fetch objective
         metric2=-c.dot(_fx);
       }

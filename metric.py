@@ -1,9 +1,10 @@
 from compile_objects import auto_download
 from compile_gripper import Link,Gripper
-from compile_world import World
 from controller import Controller
-import pyGraspMetric as gm
+from compile_world import World
 import mujoco_py as mjc
+import math,numpy as np
+import scipy,random
 
 class Metric:
     #Note that all metrics are supposed to be maximized
@@ -15,7 +16,7 @@ class Metric:
     
     def compute(self):
         raise RuntimeError('This is abstract super-class, use sub-class!')
-    
+
 class MassMetric(Metric):
     #this is the mass of the gripper
     def __init__(self):
@@ -33,7 +34,7 @@ class MassMetric(Metric):
         bid=model.body_names.index('base')
         mass=model.body_subtreemass[bid]
         return 1./mass
-        
+
 class SizeMetric(Metric):
     #this is the surface area of the bounding box
     def __init__(self):
@@ -66,7 +67,7 @@ class SizeMetric(Metric):
                 vid0=model.mesh_vertadr[mid]
                 vid1=vid0+model.mesh_vertnum[mid]
                 for vid in range(vid0,vid1):
-                    v=xori.reshape((3,3)).dot(model.mesh_vert[vid])+xpos
+                    v=xori.reshape((3,3))@(model.mesh_vert[vid])+xpos
                     for d in range(3):
                         vmin[d]=min(v[d],vmin[d])
                         vmax[d]=max(v[d],vmax[d])
@@ -96,107 +97,242 @@ class SizeMetric(Metric):
                         bids.append(i)
                         break
         return bids
-        
+
 class Q1Metric(Metric):
+    USE_NATIVE_CPP=True
     #this is the grasp quality measured after close
-    def __init__(self,FRICTION=0.7):
+    def __init__(self,FRICTION=0.7,metric=[1.]*6):
         Metric.__init__(self,True)
         self.FRICTION=FRICTION
+        self.metric=metric
     
     def __reduce__(self):
         return (self.__class__,(self.FRICTION,))
     
     def compute(self,controller,callback=False):
-        self.controller=controller
-        self.mMatrix=gm.Mat6d()
-        self.mMatrix.setZero()
+        try:
+            if not Q1Metric.USE_NATIVE_CPP:
+                raise RuntimeError("Use python not cpp!")
+            import pyGraspMetric as gm
+            mMatrix=gm.Mat6d()
+            mMatrix.setZero()
+            for d in range(6):
+                mMatrix[d,d]=self.metric[d]
+                
+            contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in controller.contact_poses]
+            contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in controller.contact_normals]
+            return gm.Q1(self.FRICTION,contact_poses,contact_normals,mMatrix,callback)
+        except:
+            return self.compute_python(controller,callback)
+      
+    def compute_python(self,controller,callback):
+        #compute G
+        nf=len(controller.contact_normals)
+        G=np.zeros((nf,6,3),dtype=np.float64)
+        pss=np.array(controller.contact_poses)
+        nss=np.array(controller.contact_normals)
+        for d in range(3):
+            row,col=(d+2)%3,(d+1)%3
+            G[:,d,d]=-1
+            G[:,3+row,col]=-pss[:,d]
+            G[:,3+col,row]= pss[:,d]
+        #metric scaling
+        metric=np.identity(6,dtype=np.float64)
         for d in range(6):
-            self.mMatrix[d,d]=1.0
-            
-        contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
-        contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.Q1(self.FRICTION,contact_poses,contact_normals,self.mMatrix,callback)
+            metric[d,d]=self.metric[d]
+        metricSqrt=scipy.linalg.sqrtm(metric)
+        #force-closedness
+        pss=[]
+        for d in range(6):
+            for val in [1.,-1.]:
+                D=[val if i==d else 0. for i in range(6)]
+                sp,w=self.support(D,metricSqrt,G,nss)
+                if sp>0:
+                    pss.append(w.tolist())
+                else: return 0.
+        #convex hull
+        iter=0
+        eps=1e-3
+        hull=scipy.spatial.ConvexHull(np.array(pss),incremental=True)   
+        while True:
+            D,sp=self.blocking(hull)
+            sp2,w=self.support(np.array(D),metricSqrt,G,nss)
+            if callback:
+                print("Iter %d: Q=%f!"%(iter,sp))
+            if sp2-sp>eps*abs(sp):
+                hull.add_points(np.array([w.tolist()]))
+            else: return sp
+            iter+=1
         
+    def blocking(self,hull):
+        D,sp=(None,None)
+        for i in range(hull.equations.shape[0]):
+            coef=1./np.linalg.norm(hull.equations[i,0:6])
+            spi=-hull.equations[i,6]*coef
+            if sp is None or spi<sp:
+                D=hull.equations[i,0:6]
+                sp=spi
+        return D.tolist(),sp
+        
+    def support(self,d,metricSqrt,G,nss):
+        ret=0.
+        wOut=np.zeros((6,))
+        dm=metricSqrt@d
+        for i in range(G.shape[0]):
+            n=nss[i,:]
+            dmG=G[i,:,:].T@dm
+            wPerp=dmG.dot(n)
+            dmGn=wPerp*n
+            dmGt=dmG-wPerp*n
+            wPara=np.linalg.norm(dmGt)
+            val=wPerp+self.FRICTION*wPara
+            if val>ret:
+                ret=val
+                wOut=G[i,:,:]@(n+dmGt*self.FRICTION/max(wPara,1e-6))
+        return ret,metricSqrt@wOut 
+
 class QInfMetric(Q1Metric):
     #this is the grasp quality measured after close
-    def __init__(self,FRICTION=0.7):
-        Metric.__init__(self,True)
-        self.FRICTION=FRICTION
+    def __init__(self,FRICTION=0.7,metric=[1.]*6):
+        Q1Metric.__init__(self,FRICTION,metric)
     
     def __reduce__(self):
         return (self.__class__,(self.FRICTION,))
     
     def compute(self,controller,callback=False):
-        self.controller=controller
-        self.mMatrix=gm.Mat6d()
-        self.mMatrix.setZero()
-        for d in range(6):
-            self.mMatrix[d,d]=1.0
-            
-        contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
-        contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QInf(self.FRICTION,contact_poses,contact_normals,self.mMatrix,callback)
+        try:
+            if not Q1Metric.USE_NATIVE_CPP:
+                raise RuntimeError("Use python not cpp!")
+            import pyGraspMetric as gm
+            mMatrix=gm.Mat6d()
+            mMatrix.setZero()
+            for d in range(6):
+                mMatrix[d,d]=self.metric[d]
+                
+            contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in controller.contact_poses]
+            contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in controller.contact_normals]
+            return gm.QInf(self.FRICTION,contact_poses,contact_normals,mMatrix,callback)
+        except:
+            return self.compute_python(controller,callback)
         
+    def support(self,d,metricSqrt,G,nss):
+        ret=0.
+        wOut=np.zeros((6,))
+        dm=metricSqrt@d
+        for i in range(G.shape[0]):
+            n=nss[i,:]
+            dmG=G[i,:,:].T@dm
+            wPerp=dmG.dot(n)
+            dmGn=wPerp*n
+            dmGt=dmG-wPerp*n
+            wPara=np.linalg.norm(dmGt)
+            val=wPerp+self.FRICTION*wPara
+            if val>0.:
+                ret+=val
+                wOut+=G[i,:,:]@(n+dmGt*self.FRICTION/max(wPara,1e-6))
+        return ret,metricSqrt@wOut 
+
 class QMSVMetric(Q1Metric):
     #this is the grasp quality measured after close
-    def __init__(self,FRICTION=0.7):
-        Metric.__init__(self,True)
-        self.FRICTION=FRICTION
+    def __init__(self):
+        Q1Metric.__init__(self)
     
     def __reduce__(self):
         return (self.__class__,(self.FRICTION,))
     
     def compute(self,controller,callback=False):
-        self.controller=controller
-        self.mMatrix=gm.Mat6d()
-        self.mMatrix.setZero()
-        for d in range(6):
-            self.mMatrix[d,d]=1.0
-            
-        contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
-        contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QMSV(self.FRICTION,contact_poses,contact_normals)
-   
+        try:
+            if not Q1Metric.USE_NATIVE_CPP:
+                raise RuntimeError("Use python not cpp!")
+            import pyGraspMetric as gm
+            mMatrix=gm.Mat6d()
+            mMatrix.setZero()
+            for d in range(6):
+                mMatrix[d,d]=1.0
+                
+            contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in controller.contact_poses]
+            contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in controller.contact_normals]
+            return gm.QMSV(self.FRICTION,contact_poses,contact_normals)
+        except:
+            nf=len(controller.contact_normals)
+            G=np.zeros((nf,6,3),dtype=np.float64)
+            pss=np.array(controller.contact_poses)
+            for d in range(3):
+                row,col=(d+2)%3,(d+1)%3
+                G[:,d,d]=1
+                G[:,3+row,col]= pss[:,d]
+                G[:,3+col,row]=-pss[:,d]
+            GGT=np.sum(G@np.swapaxes(G,1,2),axis=0)
+            eigs,_=np.linalg.eig(GGT)
+            return eigs.min()
+
 class QVEWMetric(Q1Metric):
     #this is the grasp quality measured after close
-    def __init__(self,FRICTION=0.7):
-        Metric.__init__(self,True)
-        self.FRICTION=FRICTION
+    def __init__(self):
+        Q1Metric.__init__(self)
     
     def __reduce__(self):
         return (self.__class__,(self.FRICTION,))
     
     def compute(self,controller,callback=False):
-        self.controller=controller
-        self.mMatrix=gm.Mat6d()
-        self.mMatrix.setZero()
-        for d in range(6):
-            self.mMatrix[d,d]=1.0
-            
-        contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
-        contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QVEW(self.FRICTION,contact_poses,contact_normals)
-     
+        try:
+            if not Q1Metric.USE_NATIVE_CPP:
+                raise RuntimeError("Use python not cpp!")
+            import pyGraspMetric as gm
+            mMatrix=gm.Mat6d()
+            mMatrix.setZero()
+            for d in range(6):
+                mMatrix[d,d]=1.0
+                
+            contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in controller.contact_poses]
+            contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in controller.contact_normals]
+            return gm.QVEW(self.FRICTION,contact_poses,contact_normals)
+        except:
+            nf=len(controller.contact_normals)
+            G=np.zeros((nf,6,3),dtype=np.float64)
+            pss=np.array(controller.contact_poses)
+            for d in range(3):
+                row,col=(d+2)%3,(d+1)%3
+                G[:,d,d]=1
+                G[:,3+row,col]= pss[:,d]
+                G[:,3+col,row]=-pss[:,d]
+            GGT=np.sum(G@np.swapaxes(G,1,2),axis=0)
+            return math.sqrt(np.linalg.det(GGT))
+
 class QG11Metric(Q1Metric):
     #this is the grasp quality measured after close
-    def __init__(self,FRICTION=0.7):
-        Metric.__init__(self,True)
-        self.FRICTION=FRICTION
+    def __init__(self):
+        Q1Metric.__init__(self)
     
     def __reduce__(self):
         return (self.__class__,(self.FRICTION,))
     
     def compute(self,controller,callback=False):
-        self.controller=controller
-        self.mMatrix=gm.Mat6d()
-        self.mMatrix.setZero()
-        for d in range(6):
-            self.mMatrix[d,d]=1.0
-            
-        contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in self.controller.contact_poses]
-        contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in self.controller.contact_normals]
-        return gm.QG11(self.FRICTION,contact_poses,contact_normals)
-        
+        try:
+            if not Q1Metric.USE_NATIVE_CPP:
+                raise RuntimeError("Use python not cpp!")
+            import pyGraspMetric as gm
+            mMatrix=gm.Mat6d()
+            mMatrix.setZero()
+            for d in range(6):
+                mMatrix[d,d]=1.0
+                
+            contact_poses=[gm.Vec3d(cp[0],cp[1],cp[2]) for cp in controller.contact_poses]
+            contact_normals=[gm.Vec3d(cn[0],cn[1],cn[2]) for cn in controller.contact_normals]
+            return gm.QG11(self.FRICTION,contact_poses,contact_normals)
+        except:
+            nf=len(controller.contact_normals)
+            G=np.zeros((nf,6,3),dtype=np.float64)
+            pss=np.array(controller.contact_poses)
+            for d in range(3):
+                row,col=(d+2)%3,(d+1)%3
+                G[:,d,d]=1
+                G[:,3+row,col]= pss[:,d]
+                G[:,3+col,row]=-pss[:,d]
+            GGT=np.sum(G@np.swapaxes(G,1,2),axis=0)
+            eigs,_=np.linalg.eig(GGT)
+            return eigs.min()/max(eigs.max(),1.e-9)
+
 class LiftMetric(Metric):
     #this metric measures whether the gripper can close, and then lift, and finally shake
     def __init__(self):
@@ -206,14 +342,12 @@ class LiftMetric(Metric):
         return (self.__class__,())
     
     def compute(self,controller):
-        self.controller=controller
-        
         score=0.0
-        if self.controller.closed:
+        if controller.closed:
             score+=1
-        if self.controller.lifted:
+        if controller.lifted:
             score+=1
-        if self.controller.shaked:
+        if controller.shaked:
             score+=1
         return score
 
@@ -226,15 +360,15 @@ class ElapsedMetric(Metric):
         return (self.__class__,())
     
     def compute(self,controller):
-        self.controller=controller
-        
-        dt=self.controller.sim.model.opt.timestep
-        return self.controller.elapsed*dt
-    
+        dt=controller.sim.model.opt.timestep
+        return controller.elapsed*dt
+
 if __name__=='__main__':
     #create gripper
     gripper=Gripper()
-    link=gripper.get_robot(base_off=0.3,finger_width=0.4,finger_curvature=2)
+    design={'base_off':0.2,'finger_length':0.15,'finger_width':0.3,'finger_curvature':4.,'num_finger':3,'hinge_rad':0.025}
+    policy={'id':0,'angle':[0.,math.pi*0.95/2,math.pi/2]}
+    link=gripper.get_robot(**design)
 
     #create world    
     world=World()
@@ -244,17 +378,24 @@ if __name__=='__main__':
     
     #create controller
     controller=Controller(world)
-    controller.reset(0,[0.1,0.,5.],-0.1)
-    while not controller.step():
-        pass
+    controller.reset(**policy)
+    while not controller.step():pass
     
     #compute mass metric
     print('MassMetric=',MassMetric().compute(controller))
     print('SizeMetric=',SizeMetric().compute(controller))
-    print('Q1Metric=',Q1Metric().compute(controller))
-    print('QInfMetric=',QInfMetric().compute(controller))
-    print('QMSVMetric=',QMSVMetric().compute(controller))
-    print('QVEWMetric=',QVEWMetric().compute(controller))
-    print('QG11Metric=',QG11Metric().compute(controller))
+    for q in [Q1Metric,QInfMetric]:
+        mm=[random.uniform(1.,2.) for i in range(6)]
+        Q1Metric.USE_NATIVE_CPP=False
+        mp=q(metric=mm).compute(controller)
+        Q1Metric.USE_NATIVE_CPP=True
+        mc=q(metric=mm).compute(controller)
+        print((str(q.__name__)+'CPP=%f, '+str(q.__name__)+'PYTHON=%f')%(mc,mp))
+    for q in [QMSVMetric,QVEWMetric,QG11Metric]:
+        Q1Metric.USE_NATIVE_CPP=False
+        mp=q().compute(controller)
+        Q1Metric.USE_NATIVE_CPP=True
+        mc=q().compute(controller)
+        print((str(q.__name__)+'CPP=%f, '+str(q.__name__)+'PYTHON=%f')%(mc,mp))
     print('LiftMetric=',LiftMetric().compute(controller))
     print('ElapsedMetric=',ElapsedMetric().compute(controller))

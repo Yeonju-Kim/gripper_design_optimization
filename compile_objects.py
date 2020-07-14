@@ -178,8 +178,8 @@ def prim_transform(c,T):
     if not isinstance(T,np.ndarray):
         T=np.array(T)
     if T.shape==(3,4) or T.shape==(4,4):
-        f=T[0:3,0:3].dot(ft[0:3])+T[0:3,3]
-        t=T[0:3,0:3].dot(ft[3:6])+T[0:3,3]
+        f=T[0:3,0:3]@(ft[0:3])+T[0:3,3]
+        t=T[0:3,0:3]@(ft[3:6])+T[0:3,3]
     else:
         assert T.shape==(3,)
         f=ft[0:3]+T
@@ -196,7 +196,7 @@ def mesh_transform(sg,T):
         if not isinstance(T,np.ndarray):
             T=np.array(T)
         if T.shape==(3,4) or T.shape==(4,4):
-            v=T[0:3,0:3].dot(v)+T[0:3,3]
+            v=T[0:3,0:3]@(v)+T[0:3,3]
         else:
             assert T.shape==(3,)
             v+=T
@@ -270,8 +270,8 @@ def hollow_prism_create(vss,axis,slice=32,name=None):
     for i in range(slice):
         R0=tm.transformations.rotation_matrix(angle=math.pi*2*i/slice,direction=axis)
         R1=tm.transformations.rotation_matrix(angle=math.pi*2*(i+1)/slice,direction=axis)
-        vssi=[R0[0:3,0:3].dot(v).tolist() for v in vss]
-        vssi+=[R1[0:3,0:3].dot(v).tolist() for v in vss]
+        vssi=[(R0[0:3,0:3]@v).tolist() for v in vss]
+        vssi+=[(R1[0:3,0:3]@v).tolist() for v in vss]
         
         vert=''
         for v in vssi:
@@ -308,7 +308,7 @@ def prism_create(f,t,dss,slice=32,name=None,x0=None):
         for i in range(slice):
             R=tm.transformations.rotation_matrix(angle=math.pi*2*i/slice,direction=z)
             if dist>0.:
-                vss+=(f+z*dz+R[0:3,0:3].dot(x*dist)).tolist()
+                vss+=(f+z*dz+R[0:3,0:3]@(x*dist)).tolist()
         if dist==0.:
             vss+=(f+z*dz).tolist()
         

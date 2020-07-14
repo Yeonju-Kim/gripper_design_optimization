@@ -36,12 +36,14 @@ int main(int,char**)
   supportSCS=Support::createQ1(mesh,metric,metricSqrt);
   Support::_useSCS=false;
   supportAnalytic=Support::createQ1(mesh,metric,metricSqrt);
-  for(sizeType it=0; it<10; it++) {
+  for(sizeType it=0; it<100; it++) {
     Vec6d d=Vec6d::Random();
     scalarD A=supportMosek->supportPoint(d,ids,false);
     scalarD B=supportSCS->supportPoint(d,ids,false);
     scalarD C=supportAnalytic->supportPoint(d,ids,false);
-    INFOV("Q1: Mosek=%f SCS=%f Analytic=%f!",A,B,C)
+    INFOV("Q1: Mosek=%f SCS=%f Analytic=%f MosekWErr=%f SCSWErr=%f!",A,B,C,
+          (supportMosek->w()-supportAnalytic->w()).norm(),
+          (supportSCS->w()-supportAnalytic->w()).norm())
   }
 
   Support::_useMosek=true;
@@ -51,12 +53,14 @@ int main(int,char**)
   supportSCS=Support::createQInf(mesh,metric,metricSqrt);
   Support::_useSCS=false;
   supportAnalytic=Support::createQInf(mesh,metric,metricSqrt);
-  for(sizeType it=0; it<10; it++) {
+  for(sizeType it=0; it<100; it++) {
     Vec6d d=Vec6d::Random();
     scalarD A=supportMosek->supportPoint(d,ids,false);
     scalarD B=supportSCS->supportPoint(d,ids,false);
     scalarD C=supportAnalytic->supportPoint(d,ids,false);
-    INFOV("QInf: Mosek=%f SCS=%f Analytic=%f!",A,B,C)
+    INFOV("QInf: Mosek=%f SCS=%f Analytic=%f MosekWErr=%f SCSWErr=%f!",A,B,C,
+          (supportMosek->w()-supportAnalytic->w()).norm(),
+          (supportSCS->w()-supportAnalytic->w()).norm())
   }
   return 0;
 }
