@@ -48,10 +48,22 @@ class Controller:
             leaf_link_geom_ids+=leaf
         return link_geom_ids,leaf_link_geom_ids
     
-    def reset(self,id,angle=[0.,math.pi*0.95/2,0.],init_pose=[math.pi/2,0.],approach_coef=[1.,1.],init_dist=3.):
+    def reset(self,id,angle=[0.,math.pi*0.95/2,0.],init_pose=[math.pi/2,0.],approach_coef=[1.,1.],init_dist=3.,grasp_dir=None):
         #we assume the gripper is always approaching from initial_pos to [0,0,0]
         self.world.test_object(id)
         state=self.sim.get_state()
+        
+        if grasp_dir is not None:
+            assert isinstance(grasp_dir,float)
+            if grasp_dir>0.:
+                init_pose[0]=math.pi/2
+            else:
+                cos_val=self.link.base_off/(self.link.hinge_rad+self.link.finger_length)/self.link.num_segment
+                if cos_val<0.999:
+                    init_pose[0]=-math.asin(cos_val)
+                else: init_pose[0]=-math.pi/2
+            init_pose=[init_pose[0]*abs(grasp_dir),0.]    
+            approach_coef=[grasp_dir,grasp_dir]
         
         v0=np.array([0,0,1],dtype=np.float64)
         v1=np.array([-math.cos(angle[0])*math.cos(angle[1]),-math.sin(angle[0])*math.cos(angle[1]),-math.sin(angle[1])],dtype=np.float64)
@@ -117,8 +129,8 @@ class Controller:
                     floor_contact=True
                 else: obj_contact=True
             for leafid in range(len(self.leaf_link_geom_ids)):
-                gcleaf[leafid]=gcleaf[leafid] or (c.geom1 in self.leaf_link_geom_ids[leafid])
-                gcleaf[leafid]=gcleaf[leafid] or (c.geom2 in self.leaf_link_geom_ids[leafid])
+                gcleaf[leafid]=gcleaf[leafid] or (c.geom1 in self.leaf_link_geom_ids[leafid] and c.geom2 in self.world.target_geom_ids)
+                gcleaf[leafid]=gcleaf[leafid] or (c.geom2 in self.leaf_link_geom_ids[leafid] and c.geom1 in self.world.target_geom_ids)
         return floor_contact,obj_contact,all(gcleaf)
     
     def object_contact_state(self):

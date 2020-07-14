@@ -332,6 +332,10 @@ class Gripper:
                                   finger_width=finger_width,base_rad=base_rad,hinge_rad=hinge_rad)
         
         root=Link(base,'base')
+        root.base_off=base_off
+        root.hinge_rad=hinge_rad if hinge_rad is not None else self.hinge_rad()
+        root.finger_length=finger_length if finger_length is not None else self.finger_length()
+        root.num_segment=num_segment
         for fid,TB in enumerate(transB):
             parent=root
             for s in range(num_segment):
