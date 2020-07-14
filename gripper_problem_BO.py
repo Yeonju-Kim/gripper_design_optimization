@@ -18,7 +18,7 @@ class GripperProblemBO(ProblemBO):
     #metric can be object-dependent or object-independent:
     #object-dependent metrics will be first maximized for each object, then taken mean over all objects
     #object-independent metrics will be computed for each gripper
-    def __init__(self,*,design_space,metrics,objects,policy_space=[10,5,10,3.]):
+    def __init__(self,*,design_space,metrics,objects,policy_space={}):
         if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
             os.mkdir(GripperProblemBO.DEFAULT_PATH)
         print('Initializing Domain, multi-threaded evaluation using %d processes!'%GripperProblemBO.NUMBER_PROCESS)
@@ -29,6 +29,8 @@ class GripperProblemBO(ProblemBO):
         self.vmin=[]
         self.vmax=[]
         self.vname=[]
+        self.vpolicyid=[]
+        self.mimic={}
         self.args0={}
         for designParam in design_space.split('|'):
             designParam=designParam.split(':')
@@ -41,31 +43,48 @@ class GripperProblemBO(ProblemBO):
                 self.vmin.append(float(minmax[0]))
                 self.vmax.append(float(minmax[1]))
                 self.vname.append(designParam[0])
+                self.vpolicyid.append(-1)
             else: self.args0[designParam[0]]=float(minmax[0])
             
         #policy
         coordinates=[]
-        policy_names=['theta','phi','beta']
-        self.policy_vmin=[0,math.pi/4,0.]
-        self.policy_vmax=[math.pi*2,math.pi/2*0.99,math.pi*2]    #*0.99 to phi will avoid Gimbal lock of Euler angles
-        for d in range(3):
-            if policy_space[d] is not None:
-                css=[]
-                if isinstance(policy_space[d],float):
-                    css.append(policy_space[d])
-                else:
-                    assert isinstance(policy_space[d],int)
-                    for i in range(policy_space[d]):
-                        alpha=(i+0.5)/policy_space[d]
-                        css.append(self.policy_vmin[d]*(1-alpha)+self.policy_vmax[d]*alpha)
-                coordinates.append(np.array(css))
-            else: 
-                coordinates.append(np.linspace(0.,0.,1))
-                self.vmin.append(self.policy_vmin[d])
-                self.vmax.append(self.policy_vmax[d])
-                self.vname.append(policy_names[d])
+        policy_names=    ['theta'  ,'phi'         ,'beta' ,'init_pose0','init_pose1','approach_coef0','approach_coef1','init_dist']
+        #*0.99 to phi will avoid Gimbal lock of Euler angles
+        self.policy_vmin=[0.       ,math.pi/4     ,0.     ,-math.pi/2  ,-math.pi/2  ,-1.             ,-1.             ,2.         ]
+        self.policy_vmax=[math.pi*2,math.pi/2*0.99,math.pi, math.pi/2  , math.pi/2  , 1.             , 1.             ,3.5        ]
+        self.policy_init=[0.       ,math.pi/2*0.99,0.     , math.pi/2  , 0.         , 1.             , 1.             ,3.5        ]
+        for d in range(len(policy_names)):
+            if policy_names[d] in policy_space:
+                var=policy_space[policy_names[d]]
+                if isinstance(var,int):
+                    coordinates.append(np.linspace(self.policy_vmin[d],self.policy_vmax[d],var))
+                    print('%s=%s'%(policy_names[d],str(coordinates[-1].tolist())))
+                elif isinstance(var,float):
+                    coordinates.append(np.linspace(var,var,1))
+                    print('%s=%s'%(policy_names[d],str(coordinates[-1].tolist())))
+                elif var is None:
+                    self.vmin.append(self.policy_vmin[d])
+                    self.vmax.append(self.policy_vmax[d])
+                    self.vname.append(policy_names[d])
+                    self.vpolicyid.append(d)
+                    coordinates.append(np.linspace(0.,0.,1))
+                    print('%s=(var%d,%f,%f)'%(policy_names[d],len(self.vmin)-1,self.vmin[-1],self.vmax[-1]))
+                elif isinstance(var,tuple) and isinstance(var[0],str) and isinstance(var[1],float):
+                    id=self.vname.index(var[0])
+                    minv=self.policy_vmin[d]/var[1]
+                    maxv=self.policy_vmax[d]/var[1]
+                    if maxv<minv:
+                        tmp=minv
+                        minv=maxv
+                        maxv=tmp
+                    self.vmin[id]=max(self.vmin[id],minv)
+                    self.vmax[id]=min(self.vmax[id],maxv)
+                    self.vname[id]+=':'+policy_names[d]+'='+self.vname[id]+'*'+str(var[1])
+                    self.mimic[(d,id)]=var[1]
+                    coordinates.append(np.linspace(0.,0.,1))
+                    print('%s=(var%d,%f,%f)'%(policy_names[d],id,self.vmin[id],self.vmax[id]))
+            else: coordinates.append(np.linspace(self.policy_init[d],self.policy_init[d],1))
         self.policies=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
-        self.init_dist=policy_space[3]
             
         #metric
         self.metrics=[globals()[metricName]() for metricName in metrics.split('|')]
@@ -116,11 +135,8 @@ class GripperProblemBO(ProblemBO):
         
     def compute_gripper_dependent_metrics(self,pt):
         args=self.args0
-        for a,b,n,v in zip(self.vmin,self.vmax,self.vname,pt):
-            if n=='theta':pass
-            elif n=='phi':pass
-            elif n=='beta':pass
-            else:
+        for a,b,n,id,v in zip(self.vmin,self.vmax,self.vname,self.vpolicyid,pt):
+            if id==-1:
                 assert v>=a and v<=b
                 args[n]=v
         
@@ -140,13 +156,11 @@ class GripperProblemBO(ProblemBO):
     
     def compute_object_dependent_metrics(self,link,pt,policy):
         #create designed gripper
-        for n,v in zip(self.vname,pt):
-            if n=='theta':
-                policy[0]=v
-            elif n=='phi':
-                policy[1]=v
-            elif n=='beta':
-                policy[2]=v
+        for id,v in zip(self.vpolicyid,pt):
+            if id>=0:
+                policy[id]=v
+        for k,v in self.mimic:
+            policy[k[0]]=[p*v for p in pt[k[1]]] if isinstance(pt[k[1]],list) else pt[k[1]]*v
         
         #compile to MuJoCo
         if not GripperProblemBO.ONE_OBJECT_PER_WORLD:
@@ -162,22 +176,11 @@ class GripperProblemBO(ProblemBO):
                 world=World()
                 world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects[id:id+1],link=link)
                 ctrl=Controller(world)
-        
-            #we support different policy for each object if: isinstance(policy[0/1/2],list)==True
-            #we also support same policy over all objects if: isinstance(policy[0/1/2],list)==False
-            theta=policy[0][id] if isinstance(policy[0],list) else policy[0]
-            assert theta>=self.policy_vmin[0] and theta<=self.policy_vmax[0]
-            
-            phi=policy[1][id] if isinstance(policy[1],list) else policy[1]
-            assert phi>=self.policy_vmin[1] and phi<=self.policy_vmax[1]
-            
-            beta=policy[2][id] if isinstance(policy[2],list) else policy[2]
-            assert beta>=self.policy_vmin[2] and beta<=self.policy_vmax[2]
-            
-            #print('Using policy: (%f,%f,%f) for object %d!'%(theta,phi,beta,id))
-            ctrl.reset(0 if GripperProblemBO.ONE_OBJECT_PER_WORLD else id,self.init_pos(theta,phi),beta)
+            policyid=[p[id] if isinstance(p,list) else p for p in policy]
+            ctrl.reset(0 if GripperProblemBO.ONE_OBJECT_PER_WORLD else id,  \
+                       angle=policyid[0:3],init_pose=policyid[3:5], \
+                       approach_coef=policyid[5:7],init_dist=policyid[7])
             while not ctrl.step():pass
-            #print('Experimented!')
             score_obj.append([m.compute(ctrl) if m.OBJECT_DEPENDENT else 0. for m in self.metrics])
         return score_obj
 
@@ -235,18 +238,26 @@ class GripperProblemBO(ProblemBO):
         return 'GripperProblemBO'
 
 if __name__=='__main__':
-    #case I: only optimize gripper
     from dataset_cup import get_dataset_cup
+    #case I: only optimize gripper
     domain=GripperProblemBO(design_space='finger_length:0.2,0.5|finger_curvature:-2,2',metrics='MassMetric|Q1Metric',
-                            objects=get_dataset_cup(True),policy_space=[10,5,10,3.])
+                            objects=get_dataset_cup(True),policy_space={'theta':10,'phi':5,'beta':10,'init_dist':3.})
     print(domain)
     
     #case II: optimize gripper as well as policy
-    from dataset_cup import get_dataset_cup
     domain=GripperProblemBO(design_space='base_rad:0.25|base_off:0.2|finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
-                            objects=get_dataset_cup(True),policy_space=[None,None,5,3.])
+                            objects=get_dataset_cup(True),policy_space={'theta':None,'phi':('theta',1.5),'beta':10,'init_dist':3.})
     print(domain)
     
+    #case II: another case
+    domain=GripperProblemBO(design_space='base_rad:0.25|base_off:0.2|finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
+                            objects=get_dataset_cup(True),policy_space={'theta':None,'phi':None,'beta':10,'init_dist':3.})
+    print(domain)
+    
+    #test evaluating two points
+    print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]]))
+    #test evaluating two points, with the first point using different policy for each object
+    print(domain.eval([[0.4,0.,np.linspace(0.1,6.0,10).tolist(),1.0],[0.21,0.5,0.1,1.0]]))
     #test evaluating a single point
     for ONE_OBJECT_PER_WORLD in [True,False]:
         GripperProblemBO.ONE_OBJECT_PER_WORLD=ONE_OBJECT_PER_WORLD
@@ -254,8 +265,4 @@ if __name__=='__main__':
         ret=domain.eval([[0.2,0.,0.1,math.pi/2*0.9]])
         end=time.time()
         print("ONE_OBJECT_PER_WORLD=%d, time=%s, result=%s"%(ONE_OBJECT_PER_WORLD,str(end-start),str(ret)))
-    #test evaluating two points
-    print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]]))
-    #test evaluating two points, with the first point using different policy for each object
-    print(domain.eval([[0.4,0.,np.linspace(0.1,6.0,10).tolist(),1.0],[0.21,0.5,0.1,1.0]]))
     

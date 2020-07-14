@@ -33,6 +33,6 @@ def test_dataset_cup(design,policy,controller,ids=None,repeat=5):
 
 if __name__=='__main__':
     design={'base_off':0.2,'finger_length':0.15,'finger_width':0.3,'finger_curvature':4.,'num_finger':3,'hinge_rad':0.025}
-    policy={'initial_pos':[0.1,0.,2.],'axial_rotation':math.pi/2}
+    policy={'angle':[0.,math.pi*0.95/2,math.pi/2]}
     controller={}
     test_dataset_cup(design,policy,controller,ids=None)

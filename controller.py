@@ -48,20 +48,19 @@ class Controller:
             leaf_link_geom_ids+=leaf
         return link_geom_ids,leaf_link_geom_ids
     
-    def reset(self,id,initial_pos,axial_rotation,init_pose=[math.pi/2,0.],approach_coef=[1.,1.]):
+    def reset(self,id,angle=[0.,math.pi*0.95/2,0.],init_pose=[math.pi/2,0.],approach_coef=[1.,1.],init_dist=3.):
         #we assume the gripper is always approaching from initial_pos to [0,0,0]
         self.world.test_object(id)
         state=self.sim.get_state()
         
         v0=np.array([0,0,1],dtype=np.float64)
-        v1=np.array([-initial_pos[0],-initial_pos[1],-initial_pos[2]],dtype=np.float64)
-        v1*=1/np.linalg.norm(v1)
+        v1=np.array([-math.cos(angle[0])*math.cos(angle[1]),-math.sin(angle[0])*math.cos(angle[1]),-math.sin(angle[1])],dtype=np.float64)
         R1=tm.transformations.rotation_matrix(tm.transformations.angle_between_vectors(v0,v1),tm.transformations.vector_product(v0,v1))
-        R0=tm.transformations.rotation_matrix(angle=axial_rotation,direction=[0,0,1])
+        R0=tm.transformations.rotation_matrix(angle=angle[2],direction=[0,0,1])
         R=np.matmul(R1,R0)[0:3,0:3]
         x,y,z=tm.transformations.euler_from_matrix(R,'rxyz')
         self.target_rot=[x,y,z]
-        self.target_pos=initial_pos
+        self.target_pos=(v1*-init_dist).tolist()
         self.target_vel=[v*self.approach_vel for v in v1.tolist()]
         self.target_dir=v1
         
