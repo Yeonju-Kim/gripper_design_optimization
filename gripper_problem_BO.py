@@ -48,11 +48,11 @@ class GripperProblemBO(ProblemBO):
             
         #policy
         coordinates=[]
-        policy_names=    ['theta'  ,'phi'         ,'beta' ,'init_pose0','init_pose1','approach_coef0','approach_coef1','init_dist']
+        policy_names=    ['theta'  ,'phi'         ,'beta' ,'init_pose0','init_pose1','approach_coef0','approach_coef1','init_dist','grasp_dir']
+        self.policy_vmin=[0.       ,math.pi/4     ,0.     ,-math.pi/2  ,-math.pi/2  ,-1.             ,-1.             ,2.         ,-1.        ]
+        self.policy_vmax=[math.pi*2,math.pi/2*0.99,math.pi, math.pi/2  , math.pi/2  , 1.             , 1.             ,3.5        , 1.        ]
+        self.policy_init=[0.       ,math.pi/2*0.99,0.     , math.pi/2  , 0.         , 1.             , 1.             ,3.5        ,None       ]
         #*0.99 to phi will avoid Gimbal lock of Euler angles
-        self.policy_vmin=[0.       ,math.pi/4     ,0.     ,-math.pi/2  ,-math.pi/2  ,-1.             ,-1.             ,2.         ]
-        self.policy_vmax=[math.pi*2,math.pi/2*0.99,math.pi, math.pi/2  , math.pi/2  , 1.             , 1.             ,3.5        ]
-        self.policy_init=[0.       ,math.pi/2*0.99,0.     , math.pi/2  , 0.         , 1.             , 1.             ,3.5        ]
         for d in range(len(policy_names)):
             if policy_names[d] in policy_space:
                 var=policy_space[policy_names[d]]
@@ -83,7 +83,8 @@ class GripperProblemBO(ProblemBO):
                     self.mimic[(d,id)]=var[1]
                     coordinates.append(np.linspace(0.,0.,1))
                     print('%s=(var%d,%f,%f)'%(policy_names[d],id,self.vmin[id],self.vmax[id]))
-            else: coordinates.append(np.linspace(self.policy_init[d],self.policy_init[d],1))
+            elif self.policy_init[d] is not None: 
+                coordinates.append(np.linspace(self.policy_init[d],self.policy_init[d],1))
         self.policies=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             
         #metric
@@ -179,7 +180,8 @@ class GripperProblemBO(ProblemBO):
             policyid=[p[id] if isinstance(p,list) else p for p in policy]
             ctrl.reset(0 if GripperProblemBO.ONE_OBJECT_PER_WORLD else id,  \
                        angle=policyid[0:3],init_pose=policyid[3:5], \
-                       approach_coef=policyid[5:7],init_dist=policyid[7])
+                       approach_coef=policyid[5:7],init_dist=policyid[7],   \
+                       grasp_dir=policyid[8] if len(policyid)>8 else None)
             while not ctrl.step():pass
             score_obj.append([m.compute(ctrl) if m.OBJECT_DEPENDENT else 0. for m in self.metrics])
         return score_obj
@@ -204,18 +206,16 @@ class GripperProblemBO(ProblemBO):
         while True:
             for id in range(len(world.names)):
                 policy=self.policies[object_metrics[id]]
-                for n,v in zip(self.vname,point):
-                    if n=='theta':
-                        policy[0]=v
-                    elif n=='phi':
-                        policy[1]=v
-                    elif n=='beta':
-                        policy[2]=v
-                        
-                theta=policy[0]
-                phi=policy[1]
-                beta=policy[2]
-                ctrl.reset(id,self.init_pos(theta,phi),beta)
+                for id,v in zip(self.vpolicyid,pt):
+                    if id>=0:
+                        policy[id]=v
+                for k,v in self.mimic:
+                    policy[k[0]]=[p*v for p in pt[k[1]]] if isinstance(pt[k[1]],list) else pt[k[1]]*v
+                policyid=[p[id] if isinstance(p,list) else p for p in policy]
+                ctrl.reset(0 if GripperProblemBO.ONE_OBJECT_PER_WORLD else id,  \
+                           angle=policyid[0:3],init_pose=policyid[3:5], \
+                           approach_coef=policyid[5:7],init_dist=policyid[7],   \
+                           grasp_dir=policyid[8] if len(policyid)>8 else None)
                 while not ctrl.step():
                     viewer.render()
 
@@ -251,7 +251,7 @@ if __name__=='__main__':
     
     #case II: another case
     domain=GripperProblemBO(design_space='base_rad:0.25|base_off:0.2|finger_length:0.2,0.5|finger_curvature:-2,2',metrics='SizeMetric|ElapsedMetric',
-                            objects=get_dataset_cup(True),policy_space={'theta':None,'phi':None,'beta':10,'init_dist':3.})
+                            objects=get_dataset_cup(True),policy_space={'theta':None,'phi':None,'beta':10,'init_dist':3.,'grasp_dir':1.})
     print(domain)
     
     #test evaluating two points
