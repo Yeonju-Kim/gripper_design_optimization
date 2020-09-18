@@ -24,9 +24,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         if nu is not None:
             kernel=Matern(nu=nu,length_scale=length_scale)
         else: kernel=RBF(length_scale=length_scale)
-        self.gp=[]
-        for m in problemBO.metrics:
-            self.gp.append(GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001))
+        self.gp=GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001)
         self.problemBO=problemBO
         self.kappa=kappa
         if len(self.problemBO.metrics)==1:
@@ -40,8 +38,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
             self.points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             self.scores=self.problemBO.eval(self.points)
             #self.save('init.dat')
-            for i in range(len(self.problemBO.metrics)):
-                self.gp[i].fit(self.scale_01(self.points),[s[i] for s in self.scores])
+            self.gp.fit(self.scale_01(self.points),self.scores)
     
     def iterate(self):
         def obj(x,user_data):
@@ -50,17 +47,15 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         score=self.problemBO.eval([point])[0]
         self.points.append(point)
         self.scores.append(score)
-        for i in range(len(self.problemBO.metrics)):
-            self.gp[i].fit(self.scale_01(self.points),[s[i] for s in self.scores])
+        self.gp.fit(self.scale_01(self.points),self.scores)
     
     def acquisition(self,x,user_data=None):
         #GP-UCB
         vol=1.
         sigmaSum=0.
-        for i in range(len(self.problemBO.metrics)):
-            mu,sigma=self.gp[i].predict(self.scale_01([x]),return_std=True)
-            vol*=mu[0]
-            sigmaSum+=sigma[0]
+        mu,sigma=self.gp.predict(self.scale_01([x]),return_std=True)
+        vol*=np.product(mu[0])
+        sigmaSum=sigma[0]
         return vol+sigmaSum*self.kappa
     
     def run(self, num_grid=5, num_iter=100):
@@ -71,8 +66,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
     
     def load(self,filename):
         self.points,self.scores=pickle.load(open(filename,'rb'))
-        for i in range(len(self.problemBO.metrics)):
-            self.gp[i].fit(self.scale_01(self.points),[s[i] for s in self.scores])
+        self.gp.fit(self.scale_01(self.points),self.scores)
         
     def save(self,filename):
         pickle.dump((self.points,self.scores),open(filename,'wb'))
@@ -82,7 +76,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                  
     def get_best_on_metric(self,id):
         def obj(x,user_data):
-            return -self.gp[id].predict(self.scale_01([x])),0
+            return -self.gp.predict(self.scale_01([x]))[id],0
         point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax)
         return point
 
@@ -136,10 +130,9 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         def update(frame):
             if len(gps)==frame:
                 gps.append(copy.deepcopy(self.gp))
-                for m in range(len(self.problemBO.metrics)):
-                    xdata=[self.points[i][0] for i in range(frame+1)]
-                    ydata=[self.scores[i][m] for i in range(frame+1)]
-                    gps[-1][m].fit(self.scale_01([[i] for i in xdata]),ydata)
+                xdata=[self.points[i][0] for i in range(frame+1)]
+                ydata=[self.scores[i] for i in range(frame+1)]
+                gps[-1].fit(self.scale_01([[i] for i in xdata]),ydata)
             for m in range(len(self.problemBO.metrics)):
                 #sampled points
                 xdata=[self.points[i][0] for i in range(frame+1)]
@@ -148,7 +141,8 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                 
                 #predicted mean of GP
                 xdata=np.linspace(self.problemBO.vmin[0],self.problemBO.vmax[0],res).tolist()
-                ydata,sdata=gps[frame][m].predict(self.scale_01(np.array([[i] for i in xdata])),return_std=True)
+                ydata,sdata=gps[frame].predict(self.scale_01(np.array([[i] for i in xdata])),return_std=True)
+                ydata=ydata[:,m]
                 ln_mean[m].set_data(xdata,ydata)
                 
                 #predicted variance of GP
@@ -169,14 +163,14 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         coordinates=[np.linspace(vminVal,vmaxVal,res) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
         xsmesh,ysmesh=np.meshgrid(*coordinates)
         ptsmesh=np.array([dimi.flatten() for dimi in [xsmesh,ysmesh]]).T.tolist()
-        zsmesh=[self.gp[m].predict(self.scale_01(ptsmesh)).reshape(xsmesh.shape) for m in range(len(self.problemBO.metrics))]
+        zsmesh=self.gp.predict(self.scale_01(ptsmesh)).reshape((xsmesh.shape[0],xsmesh.shape[1],len(self.problemBO.metrics)))
         
         from mpl_toolkits import mplot3d
         from matplotlib import cm
         fig=plt.figure()
         ax=plt.axes(projection='3d')
         ln_pt=[ax.scatter(xs=[],ys=[],zs=[],label='Sample (%dth Metric)'%m) for m in range(len(self.problemBO.metrics))]
-        ln_mean=[ax.plot_wireframe(X=xsmesh,Y=ysmesh,Z=zsmesh[m],label='Prediction (%dth Metric)'%m,color='red') for m in range(len(self.problemBO.metrics))]
+        ln_mean=[ax.plot_wireframe(X=xsmesh,Y=ysmesh,Z=zsmesh[:,:,m],label='Prediction (%dth Metric)'%m,color='red') for m in range(len(self.problemBO.metrics))]
         ax.set_title('Multi-Objective '+self.name())
         
         gps=[]
@@ -193,11 +187,10 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         def update(frame):
             if len(gps)==frame:
                 gps.append(copy.deepcopy(self.gp))
-                for m in range(len(self.problemBO.metrics)):
-                    xdata=[self.points[i][0] for i in range(frame+1)]
-                    ydata=[self.points[i][1] for i in range(frame+1)]
-                    zdata=[self.scores[i][m] for i in range(frame+1)]
-                    gps[-1][m].fit(self.scale_01([[x,y] for x,y in zip(xdata,ydata)]),zdata)
+                xdata=[self.points[i][0] for i in range(frame+1)]
+                ydata=[self.points[i][1] for i in range(frame+1)]
+                zdata=[self.scores[i] for i in range(frame+1)]
+                gps[-1].fit(self.scale_01([[x,y] for x,y in zip(xdata,ydata)]),zdata)
             for m in range(len(self.problemBO.metrics)):
                 #sampled points
                 xdata=[self.points[i][0] for i in range(frame+1)]
@@ -209,7 +202,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                 xsmesh=ln_mean[m]._segments3d[:,:,0]
                 ysmesh=ln_mean[m]._segments3d[:,:,1]
                 ptsmesh=np.array([dimi.flatten() for dimi in [xsmesh,ysmesh]]).T.tolist()
-                zsmesh=gps[frame][m].predict(self.scale_01(ptsmesh)).reshape(xsmesh.shape)
+                zsmesh=gps[frame].predict(self.scale_01(ptsmesh))[:,m].reshape((xsmesh.shape[0],xsmesh.shape[1]))
                 ln_mean[m]._segments3d=np.stack([xsmesh,ysmesh,zsmesh],axis=2)
             return ln_pt,ln_mean
 
@@ -223,13 +216,11 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
         on_front=[True for p in points]
         #compute score
-        scores=[]
-        for m in range(len(self.problemBO.metrics)):
-            scores.append(self.gp[m].predict(self.scale_01(points)))
+        scores=self.gp.predict(self.scale_01(points))
         #prune
-        def govern(a,b):    #return if a govern bres
+        def govern(a,b):    #return if a govern b
             for m in range(len(self.problemBO.metrics)):
-                if scores[m][a]<=scores[m][b]:
+                if scores[a][m]<=scores[b][m]:
                     return False
             return True
         for i in range(len(on_front)):
@@ -244,13 +235,15 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         front=[]
         for i in range(len(on_front)):
             if on_front[i]:
-                front.append((points[i],[scores[m][i] for m in range(len(self.problemBO.metrics))]))
+                front.append((points[i],[scores[i][m] for m in range(len(self.problemBO.metrics))]))
         return front
     
     def plot_front_2D(self,front):
         #sort by polar angle
+        min0=min([f[1][0] for f in front])
+        min1=min([f[1][1] for f in front])
         def get_polar(A):
-            x,y=A[1][0],A[1][1]
+            x,y=A[1][0]-min0,A[1][1]-min1
             return math.atan2(y,x)
         def cmp(A,B):
             return get_polar(A)-get_polar(B)
@@ -291,10 +284,10 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         else: raise RuntimeError('Plotting domain dimension > 2 is not supported!')
 
 if __name__=='__main__':
-    #problem=Test1D2MProblemBO()
-    #BO=MultiObjectiveBOGPUCB(problem)
-    #debug_toy_problem(BO)
-    #BO.plot_pareto_front(128)
+    problem=Test1D2MProblemBO()
+    BO=MultiObjectiveBOGPUCB(problem)
+    debug_toy_problem(BO)
+    BO.plot_pareto_front(128)
     
     problem=Test2D3MProblemBO()
     BO=MultiObjectiveBOGPUCB(problem)

@@ -89,12 +89,14 @@ class GripperProblemBO(ProblemBO):
         #metric
         self.metrics=metrics
     
-    def eval(self,points,parallel=True,remove_tmp=True):
+    def eval(self,points,parallel=True,remove_tmp=True,avgObject=True):
         #gripper_metrics[pt_id][metric_id]
         #object_metrics[pt_id][policy_id][object_id][metric_id]
         gripper_metrics,object_metrics=self.compute_metrics(points,parallel=parallel,remove_tmp=remove_tmp)
         #mean over objects, max over policies
-        combined_metrics=np.array(gripper_metrics)+np.array(object_metrics).max(axis=1).mean(axis=1)
+        combined_metrics=np.array(gripper_metrics)+np.array(object_metrics).max(axis=1)
+        if avgObject:
+            combined_metrics=combined_metrics.mean(axis=1)
         return combined_metrics.tolist()
     
     def compute_metrics(self,points,parallel=True,remove_tmp=True):
