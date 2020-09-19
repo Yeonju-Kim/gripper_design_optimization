@@ -189,7 +189,7 @@ if __name__=='__main__':
     
     #test evaluating two points
     print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]],parallel=True,visualize=False))
-    print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]],parallel=True,visualize=False,avgObject=False))
+    print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]],parallel=True,visualize=False,mode='MAX_POLICY'))
     #test evaluating two points, with the first point using different policy for each object
     print(domain.eval([[0.4,0.,np.linspace(0.1,6.0,10).tolist(),1.0],[0.21,0.5,0.1,1.0]]))
     #test evaluating a single point

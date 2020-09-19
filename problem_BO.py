@@ -61,19 +61,42 @@ class ProblemBO:
                 coordinates.append(np.linspace(self.policy_init[d],self.policy_init[d],1))
         self.policies=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             
-    def eval(self,points,parallel=True,remove_tmp=True,visualize=False,avgObject=True):
+    def eval(self,points,parallel=True,remove_tmp=True,visualize=False,mode='MAX_POLICY_AVG_OBJECT'):
         #gripper_metrics[pt_id][metric_id]
         #object_metrics[pt_id][policy_id][object_id][metric_id]
         gripper_metrics,object_metrics=self.compute_metrics(points,parallel=parallel,remove_tmp=remove_tmp,visualize=visualize)
         
-        if avgObject:
+        if mode=='MAX_POLICY_AVG_OBJECT':
             #for normal BO: mean over objects, max over policies
             combined_metrics=np.array(gripper_metrics)+np.array(object_metrics).max(axis=1).mean(axis=1)
             return combined_metrics.tolist()
-        else:
-            #for actor-critic BO: max over policies
+        elif mode=='MAX_POLICY':
+            #for actor-critic BO: only max over policies
             #in this case, we preserve a placeholder in gripper_metrics for object_dependent_meterics with all 0, vice versa
             return gripper_metrics,np.array(object_metrics).max(axis=1).tolist()
+        elif mode=='BEST_POLICY':
+            #for visualization: return the index of best policy
+            #returned array indices: [pt_it][object_id][best_policy]
+            obj=np.array(object_metrics)
+            best_policies=[]
+            for ptid in range(obj.shape[0]):
+                object_policies=[]
+                for oid in range(obj.shape[2]):
+                    plid=np.argmax(np.sum(obj[ptid,:,oid,:],1))
+                    object_policies.append(self.get_policy(points[ptid],plid,oid))
+                best_policies.append(object_policies)
+            return best_policies
+        else:
+            raise RuntimeError("Unsupported mode: %s",mode)
+    
+    def get_policy(self,pt,plid,oid):
+        policy=[p for p in self.policies[plid]]
+        for id,v in zip(self.vpolicyid,pt):
+            if id>=0:
+                policy[id]=v
+        for k,v in self.mimic:
+            policy[k[0]]=[p*v for p in pt[k[1]]] if isinstance(pt[k[1]],list) else pt[k[1]]*v
+        return [p[oid] if isinstance(p,list) else p for p in policy]
     
     def name(self):
         raise RuntimeError('This is abstract super-class, use sub-class!')

@@ -96,8 +96,8 @@ class ReachProblemBO(ProblemBO):
                     policy[k[0]]=[p*v for p in pt[k[1]]] if isinstance(pt[k[1]],list) else pt[k[1]]*v
             
                 object_metrics=[]
-                for o in self.objects:  #object
-                    policyo=[p[id] if isinstance(p,list) else p for p in policy]
+                for oid,o in enumerate(self.objects):  #object
+                    policyo=[p[oid] if isinstance(p,list) else p for p in policy]
                     r=Reacher(np.array(pt[:2]),np.array(policyo),o,self.obstacles)
                     object_metrics.append([m.compute(r) for m in self.metrics])
                 policy_metrics.append(object_metrics)
@@ -108,7 +108,7 @@ class ReachProblemBO(ProblemBO):
         return 'ReachProblemBO'
 
     def visualize(self):
-        SZ,sz=500,2.
+        SZ,sz,fsz=500,2.,25
         import pygame
         pygame.init()
         screen=pygame.display.set_mode([SZ,SZ])
@@ -122,18 +122,20 @@ class ReachProblemBO(ProblemBO):
         pt=[v for v in self.vmin]
         running=True
         while running:
+            #change pt
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_UP:
-                        pt[id]=min(pt[id]+0.01,self.vmax[id])
+                        pt[id]=min(pt[id]+0.05,self.vmax[id])
                     elif event.key == pygame.K_DOWN:
-                        pt[id]=max(pt[id]-0.01,self.vmin[id])
+                        pt[id]=max(pt[id]-0.05,self.vmin[id])
                     elif event.key == pygame.K_LEFT:
                         id=(id+len(pt)-1)%len(pt)
                     else:
                         id=(id+1)%len(pt)
+                        
             #display
             screen.fill((255,255,255))
             for c in self.obstacles:
@@ -141,24 +143,42 @@ class ReachProblemBO(ProblemBO):
             for o in self.objects:
                 pygame.draw.circle(screen,(255,0,0),to_screen(o),to_screen(0.02))
                 
+            #display pt
+            vals=[]
+            best_policy=self.eval([pt],mode='BEST_POLICY')
+            for pl,target in zip(best_policy[0],self.objects):
+                r=Reacher(pt[:2],pl,target,self.obstacles)
+                p0,p1,p2=r.ee()
+                pygame.draw.line(screen,(0,0,0),to_screen(p0),to_screen(p1),to_screen(0.02))
+                pygame.draw.line(screen,(0,0,0),to_screen(p1),to_screen(p2),to_screen(0.02))
+                vals.append(self.metrics[1].compute(r))
+                
             #display info
             pygame.font.init()
-            font = pygame.font.SysFont('Comic Sans MS', 30)
+            font = pygame.font.SysFont('Comic Sans MS', fsz)
+            textsurface = font.render(str(self.vname), False, (0,0,0))
+            screen.blit(textsurface,(10,0))
             ptInfo="["
             for ip,p in enumerate(pt):
-                if ip==id:
-                    ptInfo+="("+str(p)+")"
-                else: ptInfo+=str(p)
+                ptInfo+="(%2.2f)"%p if ip==id else "%2.2f"%p
                 ptInfo+="," if ip<len(pt)-1 else "]"
             textsurface = font.render(ptInfo, False, (0,0,0))
-            screen.blit(textsurface,(10,0))
+            screen.blit(textsurface,(10,fsz))
+            ptInfo="["
+            for ip,p in enumerate(vals):
+                ptInfo+="%2.2f"%p
+                ptInfo+="," if ip<len(vals)-1 else "]"
+            textsurface = font.render(ptInfo, False, (0,0,0))
+            screen.blit(textsurface,(10,fsz*2))
             pygame.display.flip()
         pygame.quit()
 
 if __name__=='__main__':
     objects=[(-0.5,1.0),(0.0,1.0),(0.5,1.0)]
     obstacles=[Circle((-0.35,0.5),0.2),Circle((0.35,0.5),0.2)]
-    reach=ReachProblemBO(objects=objects,obstacles=obstacles,policy_space=[('angle0',5),('angle1',5)])
+    reach=ReachProblemBO(objects=objects,obstacles=obstacles,policy_space=[('angle0',25),('angle1',25)])
     print(reach.eval([(0.1,0.2),(0.3,0.4)]))
-    print(reach.eval([(0.1,0.2),(0.3,0.4)],avgObject=False))
+    print(reach.eval([(0.1,0.2),(0.3,0.4)],mode='MAX_POLICY'))
+    
+    #reach=ReachProblemBO(objects=objects,obstacles=obstacles,policy_space=[('angle0',None),('angle1',None)])
     reach.visualize()
