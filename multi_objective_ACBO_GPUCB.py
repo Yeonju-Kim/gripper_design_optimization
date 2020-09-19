@@ -40,6 +40,15 @@ class ActorCritic:
     def estimate_best_score(self,design,return_std=False):
         return self.critic.predict([self.estimate_best_design_policy(design)],return_std=return_std)
 
+    def load(self,points,scores,policies):
+        self.points=points
+        self.scores=scores
+        self.policies=policies
+        self.add_points([],[])
+
+    def save(self):
+        return [self.points,self.scores,self.policies]
+
 class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
     def __init__(self,problemBO,kappa=10.,nu=None,length_scale=1.):
         if nu is not None:
@@ -91,8 +100,6 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                 policies=[o.estimate_best_policy(design) for io,o in enumerate(problemBO.objects)]
                 points.append(design+np.array(policies).T.tolist())
         scoresOI,scoresOD=self.problemBO.eval(points,mode='MAX_POLICY')
-        self.pointsOI+=points
-        self.scoresOI+=scoresOI
         self.update_gp(points,scoresOI,scoresOD)
     
     def acquisition(self,x,user_data=None):
@@ -129,14 +136,49 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         self.reconstruct_scores()
     
     def reconstruct_scores(self):
-        pass
+        self.points=self.pointsOI
+        self.scores=[]
+        for ip,p in enumerate(self.points):
+            score=[]
+            imOI=0
+            imOD=0
+            for m in self.problemBO.metrics:
+                if not m.OBJECT_DEPENDENT:
+                    score.append(self.scoresOI[ip][imOI])
+                    imOI+=1
+                else:
+                    meanScore=0.
+                    for io,o in enumerate(self.problemBO.objects):
+                        meanScore+=self.gpOD[io][imOD].estimate_best_score(p)
+                    score.append(meanScore/len(self.problemBO.objects))
+                    imOD+=1
+            self.scores.append(score)
     
     def load(self,filename):
+        data=pickle.load(open(filename,'rb'))
+        self.pointsOI=data[0]
+        self.scoresOI=data[1]
+        self.gpOI.fit(self.scale_01(self.pointsOI),self.scoresOI)
+        
+        offset=2
+        for o in problemBO.objects:
+            im=0
+            for m in problemBO.metrics:
+                if m.OBJECT_DEPENDENT:
+                    self.gpOD[io][im].load(data[offset+0],data[offset+1],data[offset+2])
+                    im+=1
+                    offset+=3
         self.reconstruct_scores()
-        pass
         
     def save(self,filename):
-        pass
+        data=[self.pointsOI,self.scoresOI]
+        for o in problemBO.objects:
+            im=0
+            for m in problemBO.metrics:
+                if m.OBJECT_DEPENDENT:
+                    data+=self.gpOD[io][im].save()
+                    im+=1
+        pickle.dump(data,open(filename,'wb'))
         
     def update_gp(self,points,scoresOI,scoresOD):
         #scoresOI indexes: [pt_id][metric_id]
