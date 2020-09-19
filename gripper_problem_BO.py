@@ -19,87 +19,24 @@ class GripperProblemBO(ProblemBO):
     #object-dependent metrics will be first maximized for each object, then taken mean over all objects
     #object-independent metrics will be computed for each gripper
     def __init__(self,*,design_space,metrics,objects,policy_space):
-        from collections import OrderedDict
-        design_space=OrderedDict(design_space)
-        policy_space=OrderedDict(policy_space)
         if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
             os.mkdir(GripperProblemBO.DEFAULT_PATH)
         print('Initializing Domain, multi-threaded evaluation using %d processes!'%GripperProblemBO.NUMBER_PROCESS)
         self.gripper=Gripper()
         self.objects=objects
         
-        #vmin/vmax/vname/args0
-        self.vmin=[]
-        self.vmax=[]
-        self.vname=[]
-        self.vpolicyid=[]
-        self.mimic={}
-        self.args0={}
-        for designParam,minmax in design_space.items():
-            if not isinstance(minmax,tuple) and not isinstance(minmax,float):
-                raise RuntimeError('Incorrect format for design_space!')
-            elif isinstance(minmax,tuple):
-                self.vmin.append(float(minmax[0]))
-                self.vmax.append(float(minmax[1]))
-                self.vname.append(designParam)
-                self.vpolicyid.append(-1)
-            else: self.args0[designParam]=float(minmax)
-            
-        #policy
-        coordinates=[]
-        policy_names=    ['theta'  ,'phi'         ,'beta' ,'init_pose0','init_pose1','approach_coef0','approach_coef1','init_dist','grasp_dir']
-        self.policy_vmin=[0.       ,math.pi/4     ,0.     ,-math.pi/2  ,-math.pi/2  ,-1.             ,-1.             ,2.         ,-1.        ]
-        self.policy_vmax=[math.pi*2,math.pi/2*0.99,math.pi, math.pi/2  , math.pi/2  , 1.             , 1.             ,3.5        , 1.        ]
-        self.policy_init=[0.       ,math.pi/2*0.99,0.     , math.pi/2  , 0.         , 1.             , 1.             ,3.5        ,None       ]
+        self.policy_names=['theta'  ,'phi'         ,'beta' ,'init_pose0','init_pose1','approach_coef0','approach_coef1','init_dist','grasp_dir']
+        self.policy_vmin= [0.       ,math.pi/4     ,0.     ,-math.pi/2  ,-math.pi/2  ,-1.             ,-1.             ,2.         ,-1.        ]
+        self.policy_vmax= [math.pi*2,math.pi/2*0.99,math.pi, math.pi/2  , math.pi/2  , 1.             , 1.             ,3.5        , 1.        ]
+        self.policy_init= [0.       ,math.pi/2*0.99,0.     , math.pi/2  , 0.         , 1.             , 1.             ,3.5        ,None       ]
         #*0.99 to phi will avoid Gimbal lock of Euler angles
-        for d in range(len(policy_names)):
-            if policy_names[d] in policy_space:
-                var=policy_space[policy_names[d]]
-                if isinstance(var,int):
-                    coordinates.append(np.linspace(self.policy_vmin[d],self.policy_vmax[d],var))
-                    print('%s=%s'%(policy_names[d],str(coordinates[-1].tolist())))
-                elif isinstance(var,float):
-                    coordinates.append(np.linspace(var,var,1))
-                    print('%s=%s'%(policy_names[d],str(coordinates[-1].tolist())))
-                elif var is None:
-                    self.vmin.append(self.policy_vmin[d])
-                    self.vmax.append(self.policy_vmax[d])
-                    self.vname.append(policy_names[d])
-                    self.vpolicyid.append(d)
-                    coordinates.append(np.linspace(0.,0.,1))
-                    print('%s=(var%d,%f,%f)'%(policy_names[d],len(self.vmin)-1,self.vmin[-1],self.vmax[-1]))
-                elif isinstance(var,tuple) and isinstance(var[0],str) and isinstance(var[1],float):
-                    id=self.vname.index(var[0])
-                    minv=self.policy_vmin[d]/var[1]
-                    maxv=self.policy_vmax[d]/var[1]
-                    if maxv<minv:
-                        tmp=minv
-                        minv=maxv
-                        maxv=tmp
-                    self.vmin[id]=max(self.vmin[id],minv)
-                    self.vmax[id]=min(self.vmax[id],maxv)
-                    self.vname[id]+=':'+policy_names[d]+'='+self.vname[id]+'*'+str(var[1])
-                    self.mimic[(d,id)]=var[1]
-                    coordinates.append(np.linspace(0.,0.,1))
-                    print('%s=(var%d,%f,%f)'%(policy_names[d],id,self.vmin[id],self.vmax[id]))
-            elif self.policy_init[d] is not None: 
-                coordinates.append(np.linspace(self.policy_init[d],self.policy_init[d],1))
-        self.policies=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
-            
+        
         #metric
         self.metrics=metrics
     
-    def eval(self,points,parallel=True,remove_tmp=True,avgObject=True):
-        #gripper_metrics[pt_id][metric_id]
-        #object_metrics[pt_id][policy_id][object_id][metric_id]
-        gripper_metrics,object_metrics=self.compute_metrics(points,parallel=parallel,remove_tmp=remove_tmp)
-        #mean over objects, max over policies
-        combined_metrics=np.array(gripper_metrics)+np.array(object_metrics).max(axis=1)
-        if avgObject:
-            combined_metrics=combined_metrics.mean(axis=1)
-        return combined_metrics.tolist()
-    
-    def compute_metrics(self,points,parallel=True,remove_tmp=True):
+        ProblemBO.__init__(self,design_space,policy_space)
+        
+    def compute_metrics(self,points,parallel=True,remove_tmp=True,visualize=False):
         #create temporary file path
         if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
             os.mkdir(GripperProblemBO.DEFAULT_PATH)
@@ -120,8 +57,8 @@ class GripperProblemBO(ProblemBO):
             #compute object-dependent metrics in parallel
             for policy_id in range(len(self.policies)):
                 if parallel:
-                    object_metrics[pt_id][policy_id]=pool.submit(self.compute_object_dependent_metrics,link,points[pt_id],self.policies[policy_id])
-                else: object_metrics[pt_id][policy_id]=self.compute_object_dependent_metrics(link,points[pt_id],self.policies[policy_id])
+                    object_metrics[pt_id][policy_id]=pool.submit(self.compute_object_dependent_metrics,link,points[pt_id],self.policies[policy_id],visualize)
+                else: object_metrics[pt_id][policy_id]=self.compute_object_dependent_metrics(link,points[pt_id],self.policies[policy_id],visualize)
                 
         #join-all & get results
         if parallel:
@@ -156,7 +93,7 @@ class GripperProblemBO(ProblemBO):
         model=mjc.load_model_from_path(GripperProblemBO.DEFAULT_PATH+'/gripper.xml')
         return link,[0. if m.OBJECT_DEPENDENT else m.compute(mjc.MjSim(model)) for m in self.metrics]
     
-    def compute_object_dependent_metrics(self,link,pt,policy):
+    def compute_object_dependent_metrics(self,link,pt,policy,visualize):
         #create designed gripper
         for id,v in zip(self.vpolicyid,pt):
             if id>=0:
@@ -183,7 +120,10 @@ class GripperProblemBO(ProblemBO):
                        angle=policyid[0:3],init_pose=policyid[3:5], \
                        approach_coef=policyid[5:7],init_dist=policyid[7],   \
                        grasp_dir=policyid[8] if len(policyid)>8 else None)
-            while not ctrl.step():pass
+            viewer=mjc.MjViewer(world.sim) if visualize else None
+            while not ctrl.step():
+                if viewer is not None:
+                    viewer.render()
             score_obj.append([m.compute(ctrl) if m.OBJECT_DEPENDENT else 0. for m in self.metrics])
         return score_obj
 
@@ -220,49 +160,36 @@ class GripperProblemBO(ProblemBO):
                 while not ctrl.step():
                     viewer.render()
 
-    def __str__(self):
-        import glob
-        ret='ProblemBO:\n'
-        for o in self.objects:
-            if isinstance(o,str):
-                var=str(o)
-            elif isinstance(o,list): 
-                var='Composite(#geom=%d)'%len(o)
-            else: var='Composite(#geom=1)'
-            ret+='Object: %s\n'%var
-        for a,b,n in zip(self.vmin,self.vmax,self.vname):
-            ret+='Param %20s: [%10f,%10f]\n'%(n,a,b)
-        ret+='Evaluating %d policies per point\n'%len(self.policies)
-        return ret
-
     def name(self):
         return 'GripperProblemBO'
 
 if __name__=='__main__':
     from dataset_cup import get_dataset_cup
+    nObj=3
     #case I: only optimize gripper
     domain=GripperProblemBO(design_space=[('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))],
                             metrics=[MassMetric(),Q1Metric()],
-                            objects=get_dataset_cup(True),
+                            objects=get_dataset_cup(True)[:nObj],
                             policy_space=[('theta',10),('phi',5),('beta',10),('init_dist',3.)])
     print(domain)
     
     #case II: optimize gripper as well as policy
     domain=GripperProblemBO(design_space=[('base_rad',0.25),('base_off',0.2),('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))],
                             metrics=[SizeMetric(),ElapsedMetric()],
-                            objects=get_dataset_cup(True),
+                            objects=get_dataset_cup(True)[:nObj],
                             policy_space=[('theta',None),('phi',('theta',1.5)),('beta',10),('init_dist',3.)])
     print(domain)
     
     #case II: another case
     domain=GripperProblemBO(design_space=[('base_rad',0.25),('base_off',0.2),('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))],
                             metrics=[SizeMetric(),ElapsedMetric()],
-                            objects=get_dataset_cup(True),
+                            objects=get_dataset_cup(True)[:nObj],
                             policy_space=[('theta',None),('phi',None),('beta',10),('init_dist',3.),('grasp_dir',1.)])
     print(domain)
     
     #test evaluating two points
-    print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]]))
+    print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]],parallel=True,visualize=False))
+    print(domain.eval([[0.4,0.,0.1,1.0],[0.21,0.5,0.1,1.0]],parallel=True,visualize=False,avgObject=False))
     #test evaluating two points, with the first point using different policy for each object
     print(domain.eval([[0.4,0.,np.linspace(0.1,6.0,10).tolist(),1.0],[0.21,0.5,0.1,1.0]]))
     #test evaluating a single point
