@@ -29,13 +29,15 @@ class SingleObjectiveBOGPUCB:
         def obj(x,user_data):
             return -self.acquisition(x),0
         point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax,logfilename='../direct.txt',algmethod=1)
+        point=point.tolist()
         score=self.problemBO.eval([point])[0][0]
         self.points.append(point)
         self.scores.append(score)
         self.gp.fit(self.scale_01(self.points),self.scores)
         
     def scale_01(self,points):
-        return [[(d-a)/(b-a) for a,b,d in zip(self.problemBO.vmin,self.problemBO.vmax,pt)] for pt in points]
+        lb,ub=self.problemBO.vmin[:len(points[0])],self.problemBO.vmax[:len(points[0])]
+        return [[(d-a)/(b-a) for a,b,d in zip(lb,ub,pt)] for pt in points]
         
     def acquisition(self,x,user_data=None):
         #GP-UCB

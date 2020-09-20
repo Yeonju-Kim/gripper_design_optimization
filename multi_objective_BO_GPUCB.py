@@ -44,6 +44,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         def obj(x,user_data):
             return -self.acquisition(x),0
         point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax,logfilename='../direct.txt',algmethod=1)
+        point=point.tolist()
         score=self.problemBO.eval([point])[0]
         self.points.append(point)
         self.scores.append(score)
