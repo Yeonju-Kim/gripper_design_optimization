@@ -28,11 +28,35 @@ class ActorCritic:
             policy,score,ierror=DIRECT.solve(obj,self.BO.problemBO.vmin[self.ndesign:],   \
                                              self.BO.problemBO.vmax[self.ndesign:],       \
                                              logfilename='../direct.txt',algmethod=1)
-            self.policies.append(policy)
+            self.policies.append(self.logit_transform(policy.tolist()))
         self.actor.fit(self.BO.scale_01([pt[:self.ndesign] for pt in self.points]),self.policies)
         
     def estimate_best_policy(self,design):
-        return self.actor.predict(self.BO.scale_01([design]))[0].tolist()
+        return self.sigmoid_transform(self.actor.predict(self.BO.scale_01([design]))[0].tolist())
+    
+    def logit_transform(self,policy,margin=0.01):
+        ret=[]
+        for ip,p in enumerate(policy):
+            a=self.BO.problemBO.vmin[self.ndesign+ip]
+            b=self.BO.problemBO.vmax[self.ndesign+ip]
+            margin=(b-a)*margin
+            a-=margin
+            b+=margin
+            val=(p-a)/(b-a)
+            ret.append(math.log(val)-math.log(1-val))
+        return ret
+    
+    def sigmoid_transform(self,policy,margin=0.01):
+        ret=[]
+        for ip,p in enumerate(policy):
+            a=self.BO.problemBO.vmin[self.ndesign+ip]
+            b=self.BO.problemBO.vmax[self.ndesign+ip]
+            margin=(b-a)*margin
+            a-=margin
+            b+=margin
+            val=1./(1.+1./math.exp(p))
+            ret.append(val*(b-a)+a)
+        return ret
     
     def estimate_best_design_policy(self,design):
         return design+self.estimate_best_policy(design)
@@ -107,6 +131,67 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                 offOD+=1
         scoresOI,scoresOD=self.problemBO.eval(points,mode='MAX_POLICY')
         self.update_gp(points,scoresOI,scoresOD)
+    
+    def get_best(self):
+        kappa_tmp=self.kappa
+        self.kappa=0.
+        def obj(x,user_data):
+            return -self.acquisition(x),0
+        design,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin[:self.ndesign],
+                                                   self.problemBO.vmax[:self.ndesign],
+                                                   logfilename='../direct.txt',algmethod=1)
+        design=design.tolist()
+        self.kappa=kappa_tmp
+        
+        #recover solution point
+        points=[]
+        offOD=0
+        for m in self.problemBO.metrics:
+            if m.OBJECT_DEPENDENT:
+                policies=[self.gpOD[io][offOD].estimate_best_policy(design) for io,o in enumerate(self.problemBO.objects)]
+                points.append(design+np.array(policies).T.tolist())
+                offOD+=1
+        return points
+    
+    def get_best_on_metric(self,id):
+        #find index
+        offOD=0
+        offOI=0
+        for im,m in enumerate(self.problemBO.metrics):
+            if m.OBJECT_DEPENDENT:
+                if im==id:
+                    break
+                offOD+=1
+            else:
+                if im==id:
+                    break
+                offOI+=1
+                
+        #optimize
+        def obj(x,user_data):
+            x=x.tolist()
+            if self.problemBO.metrics[id].OBJECT_DEPENDENT:
+                muOIAvg=0.
+                for io,o in enumerate(self.problemBO.objects):
+                    muOIAvg+=self.gpOD[io][offOD].estimate_best_score(x)
+                muOIAvg/=len(self.problemBO.objects)
+                return -muOIAvg,0
+            else:
+                return -self.gpOI.predict(self.scale_01([x]))[0][offOI],0
+        design,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin[:self.ndesign],
+                                                   self.problemBO.vmax[:self.ndesign],
+                                                   logfilename='../direct.txt',algmethod=1)
+        design=design.tolist()
+        
+        #recover solution point
+        points=[]
+        offOD=0
+        for m in self.problemBO.metrics:
+            if m.OBJECT_DEPENDENT:
+                policies=[self.gpOD[io][offOD].estimate_best_policy(design) for io,o in enumerate(self.problemBO.objects)]
+                points.append(design+np.array(policies).T.tolist())
+                offOD+=1
+        return points
     
     def acquisition(self,x,user_data=None):
         #GP-UCB
@@ -218,5 +303,13 @@ if __name__=='__main__':
     obstacles=[Circle((-0.35,0.5),0.2),Circle((0.35,0.5),0.2)]
     reach=ReachProblemBO(objects=objects,obstacles=obstacles,policy_space=[('angle0',None),('angle1',None)])
     
+    num_grid=3
+    num_iter=100
     BO=MultiObjectiveACBOGPUCB(reach)
-    BO.run(num_grid=2)
+    path='../'+BO.name()+'.dat'
+    if not os.path.exists(path):
+        BO.run(num_grid=num_grid,num_iter=num_iter)
+        BO.save(path)
+    else:
+        BO.load(path)
+    reach.visualize(BO.get_best_on_metric(1)[0])

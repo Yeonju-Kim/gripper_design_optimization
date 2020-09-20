@@ -62,11 +62,12 @@ class SingleObjectiveBOGPUCB:
             
     def get_best(self):
         kappa_tmp=self.kappa
+        self.kappa=0.
         def obj(x,user_data):
             return -self.acquisition(x),0
         point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax)
         self.kappa=kappa_tmp
-        return point
+        return point.tolist()
 
     def plot_iteration(self,plt,accumulate=False,eps=0.1):
         scores=np.array(self.scores)

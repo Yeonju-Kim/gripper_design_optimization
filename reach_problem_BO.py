@@ -49,7 +49,7 @@ class ReacherSizeMetric(Metric):
         Metric.__init__(self,OBJECT_DEPENDENT=False)
     
     def compute(self,reacher):
-        return reacher.size[0]+reacher.size[1]
+        return 1./(reacher.size[0]+reacher.size[1])
 
 class ReachQualityMetric(Metric):
     def __init__(self):
@@ -107,7 +107,7 @@ class ReachProblemBO(ProblemBO):
     def name(self):
         return 'ReachProblemBO'
 
-    def visualize(self):
+    def visualize(self,ptInit=None):
         SZ,sz,fsz=500,2.,25
         import pygame
         pygame.init()
@@ -120,6 +120,10 @@ class ReachProblemBO(ProblemBO):
         
         id=0
         pt=[v for v in self.vmin]
+        if ptInit is not None and len(ptInit)==2:
+            assert len(ptInit)==len(pt)
+            pt=ptInit
+            ptInit=None
         running=True
         while running:
             #change pt
@@ -145,13 +149,23 @@ class ReachProblemBO(ProblemBO):
                 
             #display pt
             vals=[]
-            best_policy=self.eval([pt],mode='BEST_POLICY')
-            for pl,target in zip(best_policy[0],self.objects):
-                r=Reacher(pt[:2],pl,target,self.obstacles)
-                p0,p1,p2=r.ee()
-                pygame.draw.line(screen,(0,0,0),to_screen(p0),to_screen(p1),to_screen(0.02))
-                pygame.draw.line(screen,(0,0,0),to_screen(p1),to_screen(p2),to_screen(0.02))
-                vals.append(self.metrics[1].compute(r))
+            if ptInit is not None:
+                assert len(ptInit)==4
+                for io,target in enumerate(self.objects):
+                    pt=[p[io] if isinstance(p,list) else p for p in ptInit]
+                    r=Reacher(pt[:2],pt[2:],target,self.obstacles)
+                    p0,p1,p2=r.ee()
+                    pygame.draw.line(screen,(0,0,0),to_screen(p0),to_screen(p1),to_screen(0.02))
+                    pygame.draw.line(screen,(0,0,0),to_screen(p1),to_screen(p2),to_screen(0.02))
+                    vals.append(self.metrics[1].compute(r))
+            else:
+                best_policy=self.eval([pt],mode='BEST_POLICY')
+                for pl,target in zip(best_policy[0],self.objects):
+                    r=Reacher(pt[:2],pl,target,self.obstacles)
+                    p0,p1,p2=r.ee()
+                    pygame.draw.line(screen,(0,0,0),to_screen(p0),to_screen(p1),to_screen(0.02))
+                    pygame.draw.line(screen,(0,0,0),to_screen(p1),to_screen(p2),to_screen(0.02))
+                    vals.append(self.metrics[1].compute(r))
                 
             #display info
             pygame.font.init()

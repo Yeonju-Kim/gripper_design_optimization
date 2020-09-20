@@ -77,7 +77,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                  
     def get_best_on_metric(self,id):
         def obj(x,user_data):
-            return -self.gp.predict(self.scale_01([x]))[id],0
+            return -self.gp.predict(self.scale_01([x]))[0][id],0
         point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax)
         return point
 
@@ -294,3 +294,19 @@ if __name__=='__main__':
     BO=MultiObjectiveBOGPUCB(problem)
     debug_toy_problem(BO)
     BO.plot_pareto_front(128)
+    
+    from reach_problem_BO import *
+    objects=[(-0.5,1.0),(0.0,1.0),(0.5,1.0)]
+    obstacles=[Circle((-0.35,0.5),0.2),Circle((0.35,0.5),0.2)]
+    reach=ReachProblemBO(objects=objects,obstacles=obstacles,policy_space=[('angle0',5),('angle1',5)])
+    
+    num_grid=2
+    num_iter=100
+    BO=MultiObjectiveBOGPUCB(reach)
+    path='../'+BO.name()+'.dat'
+    if not os.path.exists(path):
+        BO.run(num_grid=num_grid,num_iter=num_iter)
+        BO.save(path)
+    else:
+        BO.load(path)
+    reach.visualize(BO.get_best_on_metric(1))
