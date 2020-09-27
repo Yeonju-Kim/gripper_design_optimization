@@ -65,6 +65,15 @@ class GaussianProcessScaled:
                 mean=mean[:,0]
             return mean
         
+    def sample_y(self,x,num_samples):
+        x=np.multiply(np.subtract(np.array(x),self.vminx),self.slopex)
+        ret=[gp.sample_y(x,num_samples) for gp in self.gp]
+        mean=np.stack(tuple(r for r in ret),axis=2)
+        mean=np.add(np.divide(mean,self.slopey),self.vminy)
+        if mean.shape[-1]==1:
+            mean=mean[:,:,0]
+        return mean
+        
 if __name__=='__main__':
     kappa=10.
     nu=None
@@ -78,7 +87,7 @@ if __name__=='__main__':
     y=[]
     ys=[]
     N,M=2,3
-    D,K=100,7
+    D,K,S=100,7,9
     import random
     for i in range(D):
         x.append([random.uniform(-1.,1.) for i in range(N)])
@@ -86,9 +95,11 @@ if __name__=='__main__':
         ys.append(random.uniform(-1.,1.))
     
     gp.fit(x,y)
+    gp.sample_y([[random.uniform(-1.,1.) for i in range(N)] for i in range(K)],S)
     gp.predict([[random.uniform(-1.,1.) for i in range(N)] for i in range(K)],True)
     gp.predict([[random.uniform(-1.,1.) for i in range(N)] for i in range(K)],False)
     
     gp.fit(x,ys)
+    gp.sample_y([[random.uniform(-1.,1.) for i in range(N)] for i in range(K)],S)
     gp.predict([[random.uniform(-1.,1.) for i in range(N)] for i in range(K)],True)
     gp.predict([[random.uniform(-1.,1.) for i in range(N)] for i in range(K)],False)
