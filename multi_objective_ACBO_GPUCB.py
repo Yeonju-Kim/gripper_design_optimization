@@ -26,7 +26,7 @@ class ActorCritic:
             x=x.tolist()
             points=[p[:self.ndesign]+x[i*self.npolicy:i*self.npolicy+self.npolicy] for i,p in enumerate(self.points)]
             return -self.critic.predict(points).sum()
-        if self.localOpt:
+        if self.localOpt and len(self.policies)>0:
             x=[]
             bounds=[]
             for p in self.policies:
@@ -325,7 +325,7 @@ if __name__=='__main__':
     reach=ReachProblemBO(objects=objects,obstacles=obstacles,policy_space=[('angle0',None),('angle1',None)])
     
     num_grid=3
-    num_iter=10
+    num_iter=100
     BO=MultiObjectiveACBOGPUCB(reach)
     path='../'+BO.name()+'.dat'
     if os.path.exists(path):
