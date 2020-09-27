@@ -15,14 +15,15 @@ class SingleObjectiveBOGPUCB:
         if len(self.problemBO.metrics)>1:
             raise RuntimeError('SingleObjectiveBO passed with multiple metrics!')
         
-    def init(self,num_grid):
+    def init(self,num_grid,log_path):
         coordinates=[np.linspace(vminVal,vmaxVal,num_grid) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
-        if os.path.exists('init.dat'):
-            self.load('init.dat')
+        if log_path is not None and os.path.exists(log_path+'/init.dat'):
+            self.load(log_path+'/init.dat')
         else:
             self.points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             self.scores=[metrics[0] for metrics in self.problemBO.eval(self.points)]
-            #self.save('init.dat')
+            if log_path is not None:
+                self.save(log_path+'/init.dat')
         self.gp.fit(self.points,self.scores)
         
     def iterate(self):
@@ -40,11 +41,17 @@ class SingleObjectiveBOGPUCB:
         mu,sigma=self.gp.predict([x],return_std=True)
         return mu[0]+sigma[0]*self.kappa
     
-    def run(self, num_grid=5, num_iter=100):
-        self.init(num_grid)
-        for i in range(num_iter):
+    def run(self, num_grid=5, num_iter=100, log_path=None, log_interval=100, keep_latest=5):
+        if log_path is not None and not os.path.exists(log_path):
+            os.mkdir(log_path)
+        if num_grid>0:
+            self.init(num_grid, log_path)
+        i=self.load_log(log_path,log_interval,keep_latest)
+        while i<=num_iter:
             print("Single-Objective BO Iter=%d!"%i)
             self.iterate()
+            self.save_log(i,log_path,log_interval,keep_latest)
+            i+=1
           
     def load(self,filename):
         self.points,self.scores=pickle.load(open(filename,'rb'))
@@ -52,6 +59,33 @@ class SingleObjectiveBOGPUCB:
             
     def save(self,filename):
         pickle.dump((self.points,self.scores),open(filename,'wb'))
+            
+    def load_log(self,log_path,log_interval,keep_latest):
+        i=0
+        if log_path is not None and os.path.exists(log_path):
+            import glob
+            for f in glob.glob(log_path+"/"+self.name()+"_*.dat"):
+                fn=os.path.basename(f).split("_")[-1][:-4]
+                try:
+                    i=max(i,int(fn))
+                except Exception as e:
+                    continue
+            if i>0:
+                self.load(log_path+"/"+self.name()+"_"+str(i)+".dat")
+                i+=1
+        return i
+            
+    def save_log(self,i,log_path,log_interval,keep_latest):
+        if log_path is not None and i>0 and i%log_interval==0:
+            self.save(log_path+"/"+self.name()+"_"+str(i)+".dat")
+            
+            #delete old
+            i-=keep_latest*log_interval
+            while i>0:
+                if os.path.exists(log_path+"/"+self.name()+"_"+str(i)+".dat"):
+                    os.remove(log_path+"/"+self.name()+"_"+str(i)+".dat")
+                    i-=log_interval
+                else: break
             
     def name(self):
         return 'SBO-GP-UCB('+self.problemBO.name()+')'
@@ -191,14 +225,9 @@ class SingleObjectiveBOGPUCB:
             return self.plot_func_2D(plt,eps,res,repeat)
         else: raise RuntimeError('Plotting domain dimension > 2 is not supported!')
 
-def debug_toy_problem(BO,num_iter=10,repeat=False):
-    path='../'+BO.name()+'.dat'
-    if not os.path.exists(path):
-        BO.run(num_iter=num_iter)
-        BO.save(path)
-    else:
-        BO.load(path)
-    #BO.get_best()
+def debug_toy_problem(BO,num_iter=100,repeat=False):
+    log_path='../'+BO.name()
+    BO.run(num_iter=num_iter,log_path=log_path,log_interval=num_iter//10)
     
     import matplotlib.pyplot as plt   
     BO.plot_iteration(plt,accumulate=True)

@@ -30,15 +30,16 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         if len(self.problemBO.metrics)==1:
             raise RuntimeError('MultiObjectiveBO passed with single metric!')
         
-    def init(self,num_grid):
+    def init(self,num_grid,log_path):
         coordinates=[np.linspace(vminVal,vmaxVal,num_grid) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
-        if os.path.exists('init.dat'):
-            self.load('init.dat')
+        if log_path is not None and os.path.exists(log_path+'/init.dat'):
+            self.load(log_path+'/init.dat')
         else:
             self.points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             self.scores=self.problemBO.eval(self.points)
-            #self.save('init.dat')
-            self.gp.fit(self.points,self.scores)
+            if log_path is not None:
+                self.save(log_path+'/init.dat')
+        self.gp.fit(self.points,self.scores)
     
     def iterate(self):
         def obj(x,user_data):
@@ -59,11 +60,17 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         sigmaSum=np.sum(sigma[0])
         return vol+sigmaSum*self.kappa
     
-    def run(self, num_grid=5, num_iter=100):
-        self.init(num_grid)
-        for i in range(num_iter):
+    def run(self, num_grid=5, num_iter=100, log_path=None, log_interval=100, keep_latest=5):
+        if log_path is not None and not os.path.exists(log_path):
+            os.mkdir(log_path)
+        if num_grid>0:
+            self.init(num_grid,log_path)
+        i=self.load_log(log_path,log_interval,keep_latest)
+        while i<=num_iter:
             print("Multi-Objective BO Iter=%d!"%i)
             self.iterate()
+            self.save_log(i,log_path,log_interval,keep_latest)
+            i+=1
     
     def load(self,filename):
         self.points,self.scores=pickle.load(open(filename,'rb'))

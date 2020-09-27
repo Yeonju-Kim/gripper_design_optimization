@@ -118,10 +118,10 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         if len(self.problemBO.metrics)==1:
             raise RuntimeError('MultiObjectiveBO passed with single metric!')
         
-    def init(self,num_grid):
+    def init(self,num_grid,log_path):
         coordinates=[np.linspace(vminVal,vmaxVal,num_grid) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
-        if os.path.exists('init.dat'):
-            self.load('init.dat')
+        if log_path is not None and os.path.exists(log_path+'/init.dat'):
+            self.load(log_path+'/init.dat')
         else:
             self.pointsOI=[]
             self.scoresOI=[]
@@ -130,8 +130,8 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
             points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             scoresOI,scoresOD=self.problemBO.eval(points,mode='MAX_POLICY')
             self.update_gp(points,scoresOI,scoresOD)
-            self.save('init.dat')
-        #exit(-1)
+            if log_path is not None:
+                self.save(log_path+'/init.dat')
             
     def iterate(self):
         def obj(x,user_data):
@@ -241,12 +241,17 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                 im+=1
         return vol+sigmaSum*self.kappa
                     
-    def run(self, num_grid=5, num_iter=100):
+    def run(self, num_grid=5, num_iter=100, log_path=None, log_interval=100, keep_latest=5):
+        if log_path is not None and not os.path.exists(log_path):
+            os.mkdir(log_path)
         if num_grid>0:
-            self.init(num_grid)
-        for i in range(num_iter):
+            self.init(num_grid, log_path)
+        i=self.load_log(log_path,log_interval,keep_latest)
+        while i<=num_iter:
             print("Multi-Objective ACBO Iter=%d!"%i)
             self.iterate()
+            self.save_log(i,log_path,log_interval,keep_latest)
+            i+=1
         self.reconstruct_scores()
     
     def reconstruct_scores(self):
@@ -327,10 +332,6 @@ if __name__=='__main__':
     num_grid=3
     num_iter=100
     BO=MultiObjectiveACBOGPUCB(reach)
-    path='../'+BO.name()+'.dat'
-    if os.path.exists(path):
-        BO.load(path)
-        num_grid=0
-    BO.run(num_grid=num_grid,num_iter=num_iter)
-    BO.save(path)
+    log_path='../'+BO.name()
+    BO.run(num_grid=num_grid,num_iter=num_iter,log_path=log_path,log_interval=num_iter//10)
     reach.visualize(BO.get_best_on_metric(1)[0])
