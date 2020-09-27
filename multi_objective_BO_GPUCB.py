@@ -38,7 +38,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
             self.points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             self.scores=self.problemBO.eval(self.points)
             #self.save('init.dat')
-            self.gp.fit(self.scale_01(self.points),self.scores)
+            self.gp.fit(self.points,self.scores)
     
     def iterate(self):
         def obj(x,user_data):
@@ -48,15 +48,15 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         score=self.problemBO.eval([point])[0]
         self.points.append(point)
         self.scores.append(score)
-        self.gp.fit(self.scale_01(self.points),self.scores)
+        self.gp.fit(self.points,self.scores)
     
     def acquisition(self,x,user_data=None):
         #GP-UCB
         vol=1.
         sigmaSum=0.
-        mu,sigma=self.gp.predict(self.scale_01([x]),return_std=True)
+        mu,sigma=self.gp.predict([x],return_std=True)
         vol*=np.product(mu[0])
-        sigmaSum=sigma[0]
+        sigmaSum=np.sum(sigma[0])
         return vol+sigmaSum*self.kappa
     
     def run(self, num_grid=5, num_iter=100):
@@ -67,7 +67,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
     
     def load(self,filename):
         self.points,self.scores=pickle.load(open(filename,'rb'))
-        self.gp.fit(self.scale_01(self.points),self.scores)
+        self.gp.fit(self.points,self.scores)
         
     def save(self,filename):
         pickle.dump((self.points,self.scores),open(filename,'wb'))
@@ -77,7 +77,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                  
     def get_best_on_metric(self,id):
         def obj(x,user_data):
-            return -self.gp.predict(self.scale_01([x]))[0][id],0
+            return -self.gp.predict([x])[0][id],0
         point,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin,self.problemBO.vmax)
         return point
 
@@ -133,7 +133,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                 gps.append(copy.deepcopy(self.gp))
                 xdata=[self.points[i][0] for i in range(frame+1)]
                 ydata=[self.scores[i] for i in range(frame+1)]
-                gps[-1].fit(self.scale_01([[i] for i in xdata]),ydata)
+                gps[-1].fit([[i] for i in xdata],ydata)
             for m in range(len(self.problemBO.metrics)):
                 #sampled points
                 xdata=[self.points[i][0] for i in range(frame+1)]
@@ -142,8 +142,9 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                 
                 #predicted mean of GP
                 xdata=np.linspace(self.problemBO.vmin[0],self.problemBO.vmax[0],res).tolist()
-                ydata,sdata=gps[frame].predict(self.scale_01(np.array([[i] for i in xdata])),return_std=True)
+                ydata,sdata=gps[frame].predict([[i] for i in xdata],return_std=True)
                 ydata=ydata[:,m]
+                sdata=sdata[:,m]
                 ln_mean[m].set_data(xdata,ydata)
                 
                 #predicted variance of GP
@@ -164,7 +165,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         coordinates=[np.linspace(vminVal,vmaxVal,res) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
         xsmesh,ysmesh=np.meshgrid(*coordinates)
         ptsmesh=np.array([dimi.flatten() for dimi in [xsmesh,ysmesh]]).T.tolist()
-        zsmesh=self.gp.predict(self.scale_01(ptsmesh)).reshape((xsmesh.shape[0],xsmesh.shape[1],len(self.problemBO.metrics)))
+        zsmesh=self.gp.predict(ptsmesh).reshape((xsmesh.shape[0],xsmesh.shape[1],len(self.problemBO.metrics)))
         
         from mpl_toolkits import mplot3d
         from matplotlib import cm
@@ -191,7 +192,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                 xdata=[self.points[i][0] for i in range(frame+1)]
                 ydata=[self.points[i][1] for i in range(frame+1)]
                 zdata=[self.scores[i] for i in range(frame+1)]
-                gps[-1].fit(self.scale_01([[x,y] for x,y in zip(xdata,ydata)]),zdata)
+                gps[-1].fit([[x,y] for x,y in zip(xdata,ydata)],zdata)
             for m in range(len(self.problemBO.metrics)):
                 #sampled points
                 xdata=[self.points[i][0] for i in range(frame+1)]
@@ -203,7 +204,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
                 xsmesh=ln_mean[m]._segments3d[:,:,0]
                 ysmesh=ln_mean[m]._segments3d[:,:,1]
                 ptsmesh=np.array([dimi.flatten() for dimi in [xsmesh,ysmesh]]).T.tolist()
-                zsmesh=gps[frame].predict(self.scale_01(ptsmesh))[:,m].reshape((xsmesh.shape[0],xsmesh.shape[1]))
+                zsmesh=gps[frame].predict(ptsmesh)[:,m].reshape((xsmesh.shape[0],xsmesh.shape[1]))
                 ln_mean[m]._segments3d=np.stack([xsmesh,ysmesh,zsmesh],axis=2)
             return ln_pt,ln_mean
 
@@ -217,7 +218,7 @@ class MultiObjectiveBOGPUCB(SingleObjectiveBOGPUCB):
         points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
         on_front=[True for p in points]
         #compute score
-        scores=self.gp.predict(self.scale_01(points))
+        scores=self.gp.predict(points)
         #prune
         def govern(a,b):    #return if a govern b
             for m in range(len(self.problemBO.metrics)):

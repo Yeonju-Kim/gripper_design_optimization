@@ -23,7 +23,7 @@ class SingleObjectiveBOGPUCB:
             self.points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
             self.scores=[metrics[0] for metrics in self.problemBO.eval(self.points)]
             #self.save('init.dat')
-        self.gp.fit(self.scale_01(self.points),self.scores)
+        self.gp.fit(self.points,self.scores)
         
     def iterate(self):
         def obj(x,user_data):
@@ -33,15 +33,11 @@ class SingleObjectiveBOGPUCB:
         score=self.problemBO.eval([point])[0][0]
         self.points.append(point)
         self.scores.append(score)
-        self.gp.fit(self.scale_01(self.points),self.scores)
-        
-    def scale_01(self,points):
-        lb,ub=self.problemBO.vmin[:len(points[0])],self.problemBO.vmax[:len(points[0])]
-        return [[(d-a)/(b-a) for a,b,d in zip(lb,ub,pt)] for pt in points]
+        self.gp.fit(self.points,self.scores)
         
     def acquisition(self,x,user_data=None):
         #GP-UCB
-        mu,sigma=self.gp.predict(self.scale_01([x]),return_std=True)
+        mu,sigma=self.gp.predict([x],return_std=True)
         return mu[0]+sigma[0]*self.kappa
     
     def run(self, num_grid=5, num_iter=100):
@@ -52,7 +48,7 @@ class SingleObjectiveBOGPUCB:
           
     def load(self,filename):
         self.points,self.scores=pickle.load(open(filename,'rb'))
-        self.gp.fit(self.scale_01(self.points),self.scores)
+        self.gp.fit(self.points,self.scores)
             
     def save(self,filename):
         pickle.dump((self.points,self.scores),open(filename,'wb'))
@@ -112,7 +108,7 @@ class SingleObjectiveBOGPUCB:
                 gps.append(copy.deepcopy(self.gp))
                 xdata=[self.points[i][0] for i in range(frame+1)]
                 ydata=[self.scores[i] for i in range(frame+1)]
-                gps[-1].fit(self.scale_01([[i] for i in xdata]),ydata)
+                gps[-1].fit([[i] for i in xdata],ydata)
             #sampled points
             xdata=[self.points[i][0] for i in range(frame+1)]
             ydata=[self.scores[i] for i in range(frame+1)]
@@ -120,7 +116,7 @@ class SingleObjectiveBOGPUCB:
             
             #predicted mean of GP
             xdata=np.linspace(self.problemBO.vmin[0],self.problemBO.vmax[0],res).tolist()
-            ydata,sdata=gps[frame].predict(self.scale_01(np.array([[i] for i in xdata])),return_std=True)
+            ydata,sdata=gps[frame].predict([[i] for i in xdata],return_std=True)
             ln_mean.set_data(xdata,ydata)
             
             #predicted variance of GP
@@ -141,7 +137,7 @@ class SingleObjectiveBOGPUCB:
         coordinates=[np.linspace(vminVal,vmaxVal,res) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
         xsmesh,ysmesh=np.meshgrid(*coordinates)
         ptsmesh=np.array([dimi.flatten() for dimi in [xsmesh,ysmesh]]).T.tolist()
-        zsmesh=self.gp.predict(self.scale_01(ptsmesh)).reshape(xsmesh.shape)
+        zsmesh=self.gp.predict(ptsmesh).reshape(xsmesh.shape)
         
         from mpl_toolkits import mplot3d
         from matplotlib import cm
@@ -168,7 +164,7 @@ class SingleObjectiveBOGPUCB:
                 xdata=[self.points[i][0] for i in range(frame+1)]
                 ydata=[self.points[i][1] for i in range(frame+1)]
                 zdata=[self.scores[i] for i in range(frame+1)]
-                gps[-1].fit(self.scale_01([[x,y] for x,y in zip(xdata,ydata)]),zdata)
+                gps[-1].fit([[x,y] for x,y in zip(xdata,ydata)],zdata)
             #sampled points
             xdata=[self.points[i][0] for i in range(frame+1)]
             ydata=[self.points[i][1] for i in range(frame+1)]
@@ -179,7 +175,7 @@ class SingleObjectiveBOGPUCB:
             xsmesh=ln_mean._segments3d[:,:,0]
             ysmesh=ln_mean._segments3d[:,:,1]
             ptsmesh=np.array([dimi.flatten() for dimi in [xsmesh,ysmesh]]).T.tolist()
-            zsmesh=gps[frame].predict(self.scale_01(ptsmesh)).reshape(xsmesh.shape)
+            zsmesh=gps[frame].predict(ptsmesh).reshape(xsmesh.shape)
             ln_mean._segments3d=np.stack([xsmesh,ysmesh,zsmesh],axis=2)
             return ln_pt,ln_mean
 

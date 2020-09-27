@@ -17,22 +17,22 @@ class ActorCritic:
     def add_points(self,points,scores):
         self.points+=points
         self.scores+=scores
-        self.critic.fit(self.BO.scale_01(self.points),self.scores)
+        self.critic.fit(self.points,self.scores)
         
         #optimize policy
         for p in points:
             def obj(x,user_data):
                 design_policy=p[:self.ndesign]+x.tolist()
-                value=self.critic.predict(self.BO.scale_01([design_policy]))
+                value=self.critic.predict([design_policy])
                 return -value[0],0
             policy,score,ierror=DIRECT.solve(obj,self.BO.problemBO.vmin[self.ndesign:],   \
                                              self.BO.problemBO.vmax[self.ndesign:],       \
                                              logfilename='../direct.txt',algmethod=1)
             self.policies.append(self.logit_transform(policy.tolist()))
-        self.actor.fit(self.BO.scale_01([pt[:self.ndesign] for pt in self.points]),self.policies)
+        self.actor.fit([pt[:self.ndesign] for pt in self.points],self.policies)
         
     def estimate_best_policy(self,design):
-        return self.sigmoid_transform(self.actor.predict(self.BO.scale_01([design]))[0].tolist())
+        return self.sigmoid_transform(self.actor.predict([design])[0].tolist())
     
     def logit_transform(self,policy,margin=0.01):
         ret=[]
@@ -63,7 +63,7 @@ class ActorCritic:
 
     def estimate_best_score(self,design,return_std=False):
         design_policy=self.estimate_best_design_policy(design)
-        return self.critic.predict(self.BO.scale_01([design_policy]),return_std=return_std)
+        return self.critic.predict([design_policy],return_std=return_std)
 
     def load(self,points,scores,policies):
         self.points=points
@@ -177,7 +177,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                 muOIAvg/=len(self.problemBO.objects)
                 return -muOIAvg,0
             else:
-                return -self.gpOI.predict(self.scale_01([x]))[0][offOI],0
+                return -self.gpOI.predict([x])[0][offOI],0
         design,acquisition_val,ierror=DIRECT.solve(obj,self.problemBO.vmin[:self.ndesign],
                                                    self.problemBO.vmax[:self.ndesign],
                                                    logfilename='../direct.txt',algmethod=1)
@@ -200,9 +200,9 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         x=x.tolist()
         
         #object dependent
-        mu,sigma=self.gpOI.predict(self.scale_01([x]),return_std=True)
+        mu,sigma=self.gpOI.predict([x],return_std=True)
         vol*=np.product(mu[0])
-        sigmaSum+=sigma[0]
+        sigmaSum+=np.sum(sigma[0])
         
         #object independent
         im=0
@@ -222,7 +222,8 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         return vol+sigmaSum*self.kappa
                     
     def run(self, num_grid=5, num_iter=100):
-        self.init(num_grid)
+        if num_grid>0:
+            self.init(num_grid)
         for i in range(num_iter):
             print("Multi-Objective ACBO Iter=%d!"%i)
             self.iterate()
@@ -251,7 +252,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         data=pickle.load(open(filename,'rb'))
         self.pointsOI=data[0]
         self.scoresOI=data[1]
-        self.gpOI.fit(self.scale_01(self.pointsOI),self.scoresOI)
+        self.gpOI.fit(self.pointsOI,self.scoresOI)
         data=data[2:]
         
         for io,o in enumerate(self.problemBO.objects):
@@ -278,7 +279,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         self.pointsOI+=[pt[:self.ndesign] for pt in points]
         for score in scoresOI:
             self.scoresOI.append([score[im] for im,m in enumerate(self.problemBO.metrics) if not m.OBJECT_DEPENDENT])
-        self.gpOI.fit(self.scale_01(self.pointsOI),self.scoresOI)
+        self.gpOI.fit(self.pointsOI,self.scoresOI)
         
         #scoresOD indexes: [pt_id][object_id][metric_id]
         for io,o in enumerate(self.problemBO.objects):
@@ -304,12 +305,12 @@ if __name__=='__main__':
     reach=ReachProblemBO(objects=objects,obstacles=obstacles,policy_space=[('angle0',None),('angle1',None)])
     
     num_grid=3
-    num_iter=100
+    num_iter=10
     BO=MultiObjectiveACBOGPUCB(reach)
     path='../'+BO.name()+'.dat'
-    if not os.path.exists(path):
-        BO.run(num_grid=num_grid,num_iter=num_iter)
-        BO.save(path)
-    else:
+    if os.path.exists(path):
         BO.load(path)
+        num_grid=0
+    BO.run(num_grid=num_grid,num_iter=num_iter)
+    BO.save(path)
     reach.visualize(BO.get_best_on_metric(1)[0])
