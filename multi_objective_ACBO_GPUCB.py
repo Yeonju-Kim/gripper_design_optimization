@@ -1,7 +1,8 @@
 from multi_objective_BO_GPUCB import *
+import scipy.optimize
 
 class ActorCritic:
-    def __init__(self,BO,kernel,npolicy,ndesign):
+    def __init__(self,BO,kernel,npolicy,ndesign,localOpt=True):
         self.BO=BO
         self.points=[]
         #the last npolicy variables of each point is policy
@@ -13,19 +14,38 @@ class ActorCritic:
         #gp_actor maps from points to policies
         self.actor=GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001)
         self.policies=[]
+        #old policy local optimization
+        self.localOpt=localOpt
         
     def add_points(self,points,scores):
+        #update critic
+        self.critic.fit(self.points+points,self.scores+scores)
+        
+        #optimize policy for old points: local
+        def obj_local(x):
+            x=x.tolist()
+            points=[p[:self.ndesign]+x[i*self.npolicy:i*self.npolicy+self.npolicy] for i,p in enumerate(self.points)]
+            return -self.critic.predict(points).sum()
+        if self.localOpt:
+            x=[]
+            bounds=[]
+            for p in self.policies:
+                x+=self.sigmoid_transform(p)
+                bounds+=[(a,b) for a,b in zip(self.BO.problemBO.vmin[self.ndesign:],self.BO.problemBO.vmax[self.ndesign:])]
+            x=scipy.optimize.minimize(obj_local,np.array(x),method='L-BFGS-B',bounds=bounds).x
+            self.policies=[self.logit_transform(x[i*self.npolicy:i*self.npolicy+self.npolicy]) for i,p in enumerate(self.policies)]
+            
+        #store points
         self.points+=points
         self.scores+=scores
-        self.critic.fit(self.points,self.scores)
         
-        #optimize policy
+        #optimize policy for new points: global
         for p in points:
-            def obj(x,user_data):
+            def obj_global(x,user_data):
                 design_policy=p[:self.ndesign]+x.tolist()
                 value=self.critic.predict([design_policy])
                 return -value[0],0
-            policy,score,ierror=DIRECT.solve(obj,self.BO.problemBO.vmin[self.ndesign:],   \
+            policy,score,ierror=DIRECT.solve(obj_global,self.BO.problemBO.vmin[self.ndesign:],  \
                                              self.BO.problemBO.vmax[self.ndesign:],       \
                                              logfilename='../direct.txt',algmethod=1)
             self.policies.append(self.logit_transform(policy.tolist()))
@@ -75,7 +95,7 @@ class ActorCritic:
         return [self.points,self.scores,self.policies]
 
 class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
-    def __init__(self,problemBO,kappa=10.,nu=None,length_scale=1.):
+    def __init__(self,problemBO,kappa=10.,nu=None,length_scale=1.,localOpt=True):
         if nu is not None:
             kernel=Matern(nu=nu,length_scale=length_scale)
         else: kernel=RBF(length_scale=length_scale)
@@ -91,7 +111,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         self.gpOI=GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001)
         self.gpOD=[]
         for o in problemBO.objects:
-            self.gpOD.append([ActorCritic(self,kernel,self.npolicy,self.ndesign) for m in problemBO.metrics if m.OBJECT_DEPENDENT])
+            self.gpOD.append([ActorCritic(self,kernel,self.npolicy,self.ndesign,localOpt=localOpt) for m in problemBO.metrics if m.OBJECT_DEPENDENT])
         
         self.problemBO=problemBO
         self.kappa=kappa
