@@ -242,18 +242,34 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         return vol+sigmaSum*self.kappa
                     
     def run(self, num_grid=5, num_iter=100, log_path=None, log_interval=100, keep_latest=5):
+        self.num_grid=num_grid
         if log_path is not None and not os.path.exists(log_path):
             os.mkdir(log_path)
-        if num_grid>0:
+        i = self.load_log(log_path,log_interval,keep_latest)
+        if i is 0 and num_grid>0:
             self.init(num_grid, log_path)
-        i=self.load_log(log_path,log_interval,keep_latest)
+            i = 1
         while i<=num_iter:
             print("Multi-Objective ACBO Iter=%d!"%i)
             self.iterate()
             self.save_log(i,log_path,log_interval,keep_latest)
             i+=1
         self.reconstruct_scores()
-    
+
+    def draw_plot(self, costs=None):
+        import matplotlib.pyplot as plt
+        plt.figure()
+
+        if costs is not None:
+            plt.scatter( costs[:, 0], costs[:, 1], c='b', s=5)
+        c = np.array(self.scores)
+
+        for i in range(c.shape[0]):
+            plt.text(c[i, 0], c[i, 1], str(i), size=8)
+        numinitdata = self.num_grid**len(self.problemBO.vmin)
+        plt.scatter( c[:numinitdata,0],c[:numinitdata, 1], c ='cyan', s= 5)
+        plt.scatter(c[numinitdata:, 0], c[numinitdata:, 1],c = 'r', s=5)
+        plt.show()
     def reconstruct_scores(self):
         self.points=self.pointsOI
         self.scores=[]
