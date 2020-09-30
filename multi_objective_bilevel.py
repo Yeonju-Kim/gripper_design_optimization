@@ -51,13 +51,13 @@ class Bilevel:
         return self.jointGP.predict([design_policy], return_std = return_std)
 
 class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
-    def __init__(self, problemBO, d_sample_size, num_mc_samples, max_f_eval, use_direct, partition,
-                 kappa=10., nu = None, length_scale = 1, ):
+    def __init__(self, problemBO, d_sample_size, num_mc_samples, max_f_eval, use_direct, partition,parallel,
+                 kappa=10., nu = None, length_scale = 1):
         if nu is not None:
             kernel = Matern(nu=nu, length_scale=length_scale)
         else:
             kernel = RBF(length_scale=length_scale)
-
+        self.parallel = parallel
         # create npolicy
         self.npolicy = 0
         for pid in problemBO.vpolicyid:
@@ -96,10 +96,11 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         self.scores = np.empty((0, self.metric_space_dim))
         self.num_processes=1 # max(1, multiprocessing.cpu_count()//2)
 
-    def init(self, num_grid):
+    def init(self, num_grid, log_path):
+        self.num_grid = num_grid
         coordinates=[np.linspace(vminVal,vmaxVal,num_grid) for vminVal,vmaxVal in zip(self.problemBO.vmin,self.problemBO.vmax)]
-        if os.path.exists('bilevel/init.dat'):
-            self.load('bilevel/init.dat')
+        if log_path is not None and os.path.exists(log_path+'/init.dat'):
+            self.load(log_path+'/init.dat')
             print('init!')
         else:
             self.pointsOI=[]
@@ -110,8 +111,9 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             print(points)
             scoresOI,scoresOD=self.problemBO.eval(points,mode='MAX_POLICY')
             self.update_gp(points,scoresOI,scoresOD)
-            self.save('bilevel/init.dat')
             self.update_PF()
+            if log_path is not None:
+                self.save(log_path+'/init.dat')
 
 
     def update_gp(self, points, scoresOI, scoresOD):
@@ -147,19 +149,21 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
                     score.append(score_per_group)
             self.scores = np.vstack((self.scores, score))
 
-    def run(self, num_grid=5, num_iter=100):
-        self.init(num_grid)
-        pdb.set_trace()
-        for i in range(num_iter):
-            print("Multi-Objective ACBO Iter=%d!"%i)
-            self.iterate()
+    def run(self, num_grid=5, num_iter=100, log_path = None, log_interval = 100, keep_latest= 5):
+        self.num_grid=num_grid
+        if log_path is not None and not os.path.exists(log_path):
+            os.mkdir(log_path)
 
-    def run_with_file(self, filename,num_iter=100):
-        self.load(filename)
-        pdb.set_trace()
-        for i in range(num_iter):
-            print("Multi-Objective ACBO Iter=%d!"%i)
+        i = self.load_log(log_path,log_interval,keep_latest)
+        print(i)
+        if i is 0 and num_grid>0:
+            self.init(num_grid,log_path)
+            i = 1
+        while i <= num_iter:
+            print("Multi-Objective Bilevel Iter=%d!" % i)
             self.iterate()
+            self.save_log(i, log_path, log_interval, keep_latest)
+            i += 1
 
     def points_object(self, points, io):
         ret = []
@@ -192,7 +196,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
 
         #Environment-independent score: mass
         time_eval_metric = time.time()
-        scoresOI, scoresOD = self.problemBO.eval([design_policy], mode='MAX_POLICY', visualize=True)
+        scoresOI, scoresOD = self.problemBO.eval([design_policy], mode='MAX_POLICY', visualize=False)
         self.time_simulation.append(time.time() - time_eval_metric)
         print('simulation: ', time.time() - time_eval_metric)
 
@@ -214,6 +218,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         env_dep_metrics = self.estimate_env_dep_metrics(point=x)
 
         costs = self.reconstruct_score(env_indep_metrics.T, env_dep_metrics)
+
         # costs = np.vstack((env_indep_metrics, env_dep_metrics)).T
 
         # compare with current PF
@@ -222,7 +227,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         # self.draw_plot(costs)
         return len(num_nondominated)
 
-    def estimate_env_dep_metrics(self, point, parallel = False):
+    def estimate_env_dep_metrics(self, point):
         #mc samples for env-dependent metrics
         num_samples = self.num_mc_samples
 
@@ -234,6 +239,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         else:
             config_opt_func = self.compute_max_gp_sampling
 
+        parallel = self.parallel
         if parallel:
             from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor, as_completed
             pool = ProcessPoolExecutor(max_workers=self.num_processes)
@@ -284,7 +290,6 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         return config_candidates[arg][0]
 
     def compute_max_gp_DIRECT(self, object_id, point):
-        #TODO: Fill in here
         def obj(x, user_data):
             mul_mean = 1.
             sum_sigma = 0.
@@ -431,7 +436,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         else:
             design, acquisition_val, ierror = DIRECT.solve(obj,self.problemBO.vmin[:self.ndesign],
                                                            self.problemBO.vmax[:self.ndesign],
-                                                           logfilename='../direct.txt',algmethod=1, maxf = self.max_f_eval)
+                                                           logfilename='../direct.txt',algmethod=1)
         #recover solution point
         points = []
         offOD = 0
@@ -453,11 +458,26 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
 
         for i in range(c.shape[0]):
             plt.text(c[i, 0], c[i, 1], str(i), size=8)
-
-        plt.scatter( c[:81,0],c[:81, 1], c ='cyan', s= 5)
-        plt.scatter(c[81:, 0], c[81:, 1],c = 'r', s=5)
+        num_init_data = self.num_grid**len(self.problemBO.vmin)
+        plt.scatter(c[:num_init_data,0],c[:num_init_data, 1], c ='cyan', s= 5)
+        plt.scatter(c[num_init_data:, 0], c[num_init_data:, 1],c = 'r', s=5)
         plt.show()
 
+    def name(self):
+        return 'MACBO-BILEVEL('+self.problemBO.name()+')'+'d='+str(self.d_sample_size) +'fmax='+str(self.max_f_eval)
+
+    def save_log(self, i, log_path, log_interval, keep_latest):
+        if log_path is not None and i > 0 and i % log_interval == 0:
+            self.save(log_path + "/" + self.name() + "_" + str(i) + ".dat")
+
+            # delete old
+            i -= keep_latest * log_interval
+            while i > 0:
+                if os.path.exists(log_path + "/" + self.name() + "_" + str(i) + ".dat"):
+                    os.remove(log_path + "/" + self.name() + "_" + str(i) + ".dat")
+                    i -= log_interval
+                else:
+                    break
 
 if __name__ == '__main__':
     from reach_problem_BO import *
@@ -467,17 +487,13 @@ if __name__ == '__main__':
     reach = ReachProblemBO(objects=objects, obstacles=obstacles, policy_space=[('angle0', None), ('angle1', None)])
 
     num_grid = 3
-    num_iter = 50
+    num_iter = 10
     BO = MultiObjectiveBOBilevel(reach, d_sample_size=10,
                                  num_mc_samples = 1000, partition=[[0,1,2]],
-                                 max_f_eval = 1000, kappa=2.0, nu=2.5, use_direct=True)
-    path = '../bilevel/'+ BO.name()+'.dat'
-    if not os.path.exists(path):
-        BO.run(num_grid=num_grid, num_iter=num_iter)
-        BO.save(path)
-    else:
-        BO.run_with_file(path, num_iter=num_iter)
-        BO.save(path)
+                                 max_f_eval = 1000, kappa=2.0, nu=2.5, use_direct=True,
+                                 parallel =False)
+    log_path = '../bilevel'
+    BO.run(num_grid=num_grid, num_iter=num_iter, log_path=log_path, log_interval=num_iter//10)
 
     BO.draw_plot()
     # design = BO.pointsOI[np.argmax(np.array(BO.scores)[:, 1])]

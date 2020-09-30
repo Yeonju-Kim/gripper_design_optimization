@@ -266,10 +266,11 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
 
         for i in range(c.shape[0]):
             plt.text(c[i, 0], c[i, 1], str(i), size=8)
-        numinitdata = self.num_grid**len(self.problemBO.vmin)
-        plt.scatter( c[:numinitdata,0],c[:numinitdata, 1], c ='cyan', s= 5)
-        plt.scatter(c[numinitdata:, 0], c[numinitdata:, 1],c = 'r', s=5)
+        num_init_data = self.num_grid**len(self.problemBO.vmin)
+        plt.scatter(c[:num_init_data,0],c[:num_init_data, 1], c ='cyan', s= 5)
+        plt.scatter(c[num_init_data:, 0], c[num_init_data:, 1],c = 'r', s=5)
         plt.show()
+
     def reconstruct_scores(self):
         self.points=self.pointsOI
         self.scores=[]
@@ -284,7 +285,8 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                 else:
                     meanScore=0.
                     for io,o in enumerate(self.problemBO.objects):
-                        meanScore+=self.gpOD[io][imOD].estimate_best_score(p)
+                        # meanScore+=self.gpOD[io][imOD].estimate_best_score(p)
+                        meanScore+= self.gpOD[io][imOD].scores[ip]
                     score.append(meanScore/len(self.problemBO.objects))
                     imOD+=1
             self.scores.append(score)
@@ -337,7 +339,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         return ret
                     
     def name(self):
-        return 'MACBO-GP-UCB('+self.problemBO.name()+')'
+        return 'MACBO-ACBO-GPUCB('+self.problemBO.name()+')'+'d='+str(self.d_sample_size) +'fmax='+str(self.max_f_eval)
                  
 if __name__=='__main__':
     from reach_problem_BO import *

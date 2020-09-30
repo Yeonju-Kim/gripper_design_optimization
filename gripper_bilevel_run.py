@@ -49,29 +49,21 @@ def create_gripper_problem_BO(high_dimensional_design_space=False, high_dimensio
 plot = True
 test = True
 if __name__ == '__main__':
-    from dataset_cup import get_dataset_cup
-
-    Total = 2000
-    num_design_samples = 3
-    num_iter = Total // num_design_samples
-
+    Total = 100000
+    num_design_samples = 5
+    num_iter = 100
+    num_grid = 2 #default gripper num_grid
     domain = create_gripper_problem_BO()
     BO = MultiObjectiveBOBilevel(problemBO=domain, d_sample_size=num_design_samples,
-                                 num_mc_samples=  1000, partition=[[0,1,2,3,4,5,6,7,8,9,10,11,12]],
-                                 max_f_eval=20000, kappa=10.0, nu=10.0, use_direct=False)
+                                 num_mc_samples= 1000, partition=[[0,1,2,3,4,5,6,7,8,9,10,11,12]],
+                                 max_f_eval=Total//num_design_samples, parallel=True,
+                                 kappa=10.0, nu=2.5, use_direct=True)
     starttime = time.time()
     # main loop
-    save_path = BO.name() + '.dat'
-    load_path = 'init.dat'
-    if not os.path.exists(load_path):
-        BO.run(num_grid=1, num_iter=10)
-        np.save('scores', np.array(BO.scores))
-        BO.save(save_path)
-    else:
-        BO.run_with_file(file_name=load_path, num_iter=1)
-        np.save('scores', np.array(BO.scores))
-        BO.save(save_path)
+    log_path = '../gripper_bilevel'
+    BO.run(num_grid=num_grid, num_iter=num_iter, log_path=log_path, log_interval=num_iter//10)
     print('time ---- ', time.time() - starttime)
+    pdb.set_trace()
 
     # if test:
     #     li =[64, 188, 151, 86, 165, 104, 67, 83, 75, 88, 3, 15, 78, 91]
