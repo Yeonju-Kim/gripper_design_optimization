@@ -1,4 +1,4 @@
-from multi_objective_bilevel import *
+from multi_objective_ACBO_GPUCB import *
 import pdb
 import argparse
 from gripper_problem_BO import *
@@ -47,38 +47,28 @@ def create_gripper_problem_BO(high_dimensional_design_space=False, high_dimensio
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Bilevel_gripper optimization')
+    parser = argparse.ArgumentParser(description='ACBO gripper optimization')
     parser.add_argument('--num_design_samples', type=int, help='Number of design samples per iteration')
-    parser.add_argument('--maxf', type=int, help='Number of design samples per iteration')
-    parser.add_argument('--use_direct', type=bool, help='To use DIRECT opt for policy search')
+    parser.add_argument('--use_direct', default=False, type=lambda x: (str(x).lower() == 'true'),
+                        help='To use DIRECT opt for design search')
     parser.add_argument('--kappa', type=float, help='kappa needed for policy search')
-    parser.add_argument('--logpath', type=str, default='../bilevel_gripper', help='Directory path for logging')
-    parser.add_argument('--num_iter', type=int, default=100, help='The number of designs that will be generated.')
+    parser.add_argument('--logpath', type=str, default='../ACBO_gripper', help='Directory path for logging')
+    parser.add_argument('--num_iter', type=int, default=10, help='The number of designs that will be generated.')
     parser.add_argument('--num_grid', type=int, default=2, help='Gripper_problem = 2 6dim 64 initial points')
     parser.add_argument('--num_mc_samples', type=int, default=1000,
                         help='Num of samples generated from gp posterior to compute acquisition funcion')
     args = parser.parse_args()
 
     domain = create_gripper_problem_BO()
-    BO = MultiObjectiveBOBilevel(problemBO=domain, d_sample_size=args.num_design_samples,
+    BO = MultiObjectiveACBOGPUCB(problemBO=domain,
+                                 d_sample_size=args.num_design_samples,
                                  num_mc_samples=args.num_mc_samples,
                                  partition=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]],
-                                 max_f_eval=args.maxf, parallel=True,
-                                 kappa=args.kappa, nu=2.5, use_direct=args.use_direct)
+                                 kappa=args.kappa, nu=2.5,
+                                 use_direct_for_design=args.use_direct)
     start_time = time.time()
-    BO.run(num_grid=args.num_grid, num_iter=args.num_iter, log_path=args.logpath, log_interval=args.num_iter // 10)
+    BO.run(num_grid=args.num_grid, num_iter=args.num_iter,
+           log_path=args.logpath, log_interval=args.num_iter // 10)
     print('time ---- ', time.time() - start_time)
-    BO.graph_gripper_plot()
+    BO.draw_plot()
     pdb.set_trace()
-
-    # if test:
-    #     li =[64, 188, 151, 86, 165, 104, 67, 83, 75, 88, 3, 15, 78, 91]
-    #     for i in li:
-    #         print(i)
-    #         sol = BO.points[i]
-    #         domain.plot_solution(sol,i,view= True)
-    #         ori = []
-    #         for k in range(len(BO.problemBO.objects)):
-    #             ori.append(BO.problemBO.train_label[k][i])
-    #         print(sum(ori)/len(BO.problemBO.objects))
-    #         print(BO.scores[i])

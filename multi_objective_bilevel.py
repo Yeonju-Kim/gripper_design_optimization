@@ -1,8 +1,10 @@
 from multi_objective_BO_GPUCB import *
 import pdb
+import matplotlib.pyplot as plt
+import multiprocessing
 import time
 class Bilevel:
-    def __init__(self, BO, kernel, npolicy, ndesign, direct_f_max):
+    def __init__(self, BO, kernel, npolicy, ndesign):
         self.BO=BO
         self.points=[]
         #the last npolicy variables of each point is policy
@@ -11,7 +13,6 @@ class Bilevel:
         #gp_critic maps from points to scores
         self.jointGP=GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001)
         self.scores=[]
-        self.direct_f_max = direct_f_max
 
     def add_points(self, points, scores):
         self.points += points
@@ -42,7 +43,7 @@ class Bilevel:
 
         policy, acquisition_val, ierror = DIRECT.solve(obj, self.BO.vmin[self.ndesign:],
                                                        self.BO.vmax[self.ndesign:],
-                                                       logfilename='../direct.txt', algmethod=1, maxf=self.direct_f_max)
+                                                       logfilename='../direct.txt', algmethod=1)
         return policy
 
     def estimate_best_score(self, design, return_std= False):
@@ -74,7 +75,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             self.gpOI.append(GaussianProcessScaled(kernel=kernel, n_restarts_optimizer=25, alpha=0.0001))
         self.gpOD = []
         for o in problemBO.objects:
-            self.gpOD.append([Bilevel(problemBO, kernel, self.npolicy, self.ndesign, max_f_eval) for i in range(self.num_metric_OD)])
+            self.gpOD.append([Bilevel(problemBO, kernel, self.npolicy, self.ndesign) for i in range(self.num_metric_OD)])
             #gpOD[objectid][object_dependent_metric id]
 
         self.problemBO = problemBO
@@ -94,7 +95,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         self.partition = partition #[[0,1,2],[3,4,5],[6,7]] for 7 objects
         self.metric_space_dim = self.num_metric_OI + self.num_metric_OD*len(partition)
         self.scores = np.empty((0, self.metric_space_dim))
-        self.num_processes=1 # max(1, multiprocessing.cpu_count()//2)
+        self.num_processes = max(1, multiprocessing.cpu_count()//2)
 
     def init(self, num_grid, log_path):
         self.num_grid = num_grid
@@ -133,9 +134,8 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
                     self.gpOD[io][offOD].add_points(self.points_object(points, io),
                                                     [scoresOD[ip][io][im] for ip, p in enumerate(points)])
                     offOD += 1
-        # pdb.set_trace()
 
-        #TODO:score
+        #reconstruct score
         for pt_id in range(len(points)):
             score = []
             for m_idx in range(self.num_metric_OI):
@@ -155,7 +155,6 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             os.mkdir(log_path)
 
         i = self.load_log(log_path,log_interval,keep_latest)
-        print(i)
         if i is 0 and num_grid>0:
             self.init(num_grid,log_path)
             i = 1
@@ -266,7 +265,8 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         for metric_od_idx in range(self.num_metric_OD):
             f_per_metric = np.empty((0, num_samples))
             for i in range(len(self.problemBO.objects)):
-                f_per_metric = np.vstack((f_per_metric, self.gpOD[i][metric_od_idx].sample_y([np.hstack((point, policies[i])).tolist()], num_samples)))
+                f_per_metric = np.vstack((f_per_metric,
+                                          self.gpOD[i][metric_od_idx].sample_y([np.hstack((point, policies[i])).tolist()], num_samples)))
             f.append(f_per_metric)
         self.temp_fmax_policy.append(policies)
         return f
@@ -449,7 +449,6 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         return points
 
     def draw_plot(self, costs=None):
-        import matplotlib.pyplot as plt
         plt.figure()
 
         if costs is not None:
@@ -463,8 +462,30 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         plt.scatter(c[num_init_data:, 0], c[num_init_data:, 1],c = 'r', s=5)
         plt.show()
 
+    def graph_gripper_plot(self):
+        plt.figure()
+        d= self.scores
+        for i in range(d.shape[0]):
+            plt.text(100*d[i, 0], d[i, 1], str(i), size=8)
+        init_idx = 64
+        plt.scatter(100*d[:init_idx, 0], d[:init_idx, 1], c='cyan', s=15, label='Initial designs ')
+        plt.scatter(100*d[init_idx:, 0], d[init_idx:, 1], c='blue', s=15, label='New designs')
+        # plt.scatter(-100 / p[:, 0], p[:, 1], c='r', s=5, label='Pareto fronts')
+
+        plt.legend()
+        plt.xlabel('100/Metric')
+        plt.ylabel('Elapsed Time Metric')
+        plt.show()
+
     def name(self):
-        return 'MACBO-BILEVEL('+self.problemBO.name()+')'+'d='+str(self.d_sample_size) +'fmax='+str(self.max_f_eval)
+        if self.use_direct:
+            return 'BILEVEL-DIRECT('+self.problemBO.name()+')'+'k='+str(self.kappa)\
+                   +'d='+str(self.d_sample_size) +'fmax='+str(self.max_f_eval)
+        else:
+            return 'BILEVEL-uniform('+self.problemBO.name()+')'+'k='+str(self.kappa)\
+                   +'d='+str(self.d_sample_size) +'fmax='+str(self.max_f_eval)
+
+
 
     def save_log(self, i, log_path, log_interval, keep_latest):
         if log_path is not None and i > 0 and i % log_interval == 0:
@@ -494,7 +515,6 @@ if __name__ == '__main__':
                                  parallel =False)
     log_path = '../bilevel'
     BO.run(num_grid=num_grid, num_iter=num_iter, log_path=log_path, log_interval=num_iter//10)
-
     BO.draw_plot()
     # design = BO.pointsOI[np.argmax(np.array(BO.scores)[:, 1])]
     # ar = np.argmax(np.array(BO.scores)[:, 1])
