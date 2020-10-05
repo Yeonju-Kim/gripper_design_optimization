@@ -50,7 +50,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Bilevel_gripper optimization')
     parser.add_argument('--num_design_samples', type=int, help='Number of design samples per iteration')
     parser.add_argument('--maxf', type=int, help='Number of design samples per iteration')
-    parser.add_argument('--use_direct', type=bool, help='To use DIRECT opt for policy search')
+    parser.add_argument('--use_direct', default=False, type=lambda x: (str(x).lower() == 'true'),
+                        help='To use DIRECT opt for policy search')
     parser.add_argument('--kappa', type=float, help='kappa needed for policy search')
     parser.add_argument('--logpath', type=str, default='../bilevel_gripper', help='Directory path for logging')
     parser.add_argument('--num_iter', type=int, default=100, help='The number of designs that will be generated.')
