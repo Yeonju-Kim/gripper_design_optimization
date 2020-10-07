@@ -58,13 +58,13 @@ if __name__ == '__main__':
     parser.add_argument('--num_mc_samples', type=int, default=1000,
                         help='Num of samples generated from gp posterior to compute acquisition funcion')
     args = parser.parse_args()
-
+    nu = 2.5
     domain = create_gripper_problem_BO()
     BO = MultiObjectiveACBOGPUCB(problemBO=domain,
                                  d_sample_size=args.num_design_samples,
                                  num_mc_samples=args.num_mc_samples,
                                  partition=[[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]],
-                                 kappa=args.kappa, nu=2.5,
+                                 kappa=args.kappa, nu=nu,
                                  use_direct_for_design=args.use_direct)
     start_time = time.time()
     BO.run(num_grid=args.num_grid, num_iter=args.num_iter,

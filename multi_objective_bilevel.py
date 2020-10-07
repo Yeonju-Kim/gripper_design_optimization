@@ -246,7 +246,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         for i in range(len(self.problemBO.objects)):
             if parallel:
                 result[i] = pool.submit(config_opt_func, i, point) # max_function_evaluation)
-                print(result)
+                # print(result)
             else:
                 temp_result = config_opt_func(i, point)
                 policies[i] = temp_result
@@ -284,10 +284,10 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             mul_mean *= m
             sum_sigma += sigma
 
-        predicted_val = mul_mean + np.expand_dims(sum_sigma, axis=1) * self.kappa
-        arg = np.argmax(predicted_val, axis=0)
-        print(config_candidates[arg][0])
-        return config_candidates[arg][0]
+        predicted_val = mul_mean + sum_sigma * self.kappa
+        arg = np.argmax(predicted_val)
+        print(predicted_val.shape)
+        return config_candidates[arg]
 
     def compute_max_gp_DIRECT(self, object_id, point):
         def obj(x, user_data):

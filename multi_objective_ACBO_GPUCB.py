@@ -510,9 +510,6 @@ if __name__=='__main__':
     BO=MultiObjectiveACBOGPUCB(reach, num_mc_samples= 1000, kappa = 2.0,
                                partition = [[0,1,2]], d_sample_size = 100,
                                use_direct_for_design =use_direct_for_design)
-    if use_direct_for_design:
-        log_path='../ACBO'
-    else:
-        log_path='../ACBO_uniform'
+    log_path='../ACBO_reach'
     BO.run(num_grid=num_grid,num_iter=num_iter,log_path=log_path,log_interval=num_iter//10)
     reach.visualize(BO.get_best_on_metric(1)[0])
