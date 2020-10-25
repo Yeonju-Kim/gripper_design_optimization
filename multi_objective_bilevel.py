@@ -43,7 +43,7 @@ class Bilevel:
 
         policy, acquisition_val, ierror = DIRECT.solve(obj, self.BO.vmin[self.ndesign:],
                                                        self.BO.vmax[self.ndesign:],
-                                                       logfilename='../direct.txt', algmethod=1)
+                                                       logfilename='../direct.txt', algmethod=1, maxf =1000)
         return policy
 
     def estimate_best_score(self, design, return_std= False):
@@ -80,8 +80,8 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
 
         self.problemBO = problemBO
         self.kappa = kappa
-        if len(self.problemBO.metrics) == 1:
-            raise RuntimeError('MultiObjectiveBO passed with single metric!')
+        # if len(self.problemBO.metrics) == 1:
+        #     raise RuntimeError('MultiObjectiveBO passed with single metric!')
 
         self.d_sample_size =d_sample_size
         self.num_mc_samples = num_mc_samples
@@ -109,6 +109,9 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             #scoresOI indexes: [pt_id][metric_id]
             #scoresOD indexes: [pt_id][object_id][metric_id]
             points=np.array([dimi.flatten() for dimi in np.meshgrid(*coordinates)]).T.tolist()
+            if self.problemBO.name() is 'TrinaRobotArm':
+                points = pickle.load(open('with_obj_trina_local_solve_init.dat', 'rb'))
+                # points = self.problemBO.initialize(100)
             print(points)
             scoresOI,scoresOD=self.problemBO.eval(points,mode='MAX_POLICY')
             self.update_gp(points,scoresOI,scoresOD)
@@ -195,7 +198,8 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
 
         #Environment-independent score: mass
         time_eval_metric = time.time()
-        scoresOI, scoresOD = self.problemBO.eval([design_policy], mode='MAX_POLICY', visualize=False)
+        scoresOI, scoresOD = self.problemBO.eval([design_policy], parallel=self.parallel,
+                                                 mode='MAX_POLICY', visualize=False)
         self.time_simulation.append(time.time() - time_eval_metric)
         print('simulation: ', time.time() - time_eval_metric)
 
@@ -233,10 +237,13 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         result = [None for m in self.problemBO.objects] # list of tuples: [(policy, gp value), .. ]
         policies = [None for i in self.problemBO.objects]
 
-        if self.use_direct:
-            config_opt_func = self.compute_max_gp_DIRECT
+        if self.problemBO.name() == 'TrinaRobotArm':
+            config_opt_func = self.compute_robot_arm_case
         else:
-            config_opt_func = self.compute_max_gp_sampling
+            if self.use_direct:
+                config_opt_func = self.compute_max_gp_DIRECT
+            else:
+                config_opt_func = self.compute_max_gp_sampling
 
         parallel = self.parallel
         if parallel:
@@ -279,14 +286,36 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
         mul_mean = 1.
         sum_sigma = 0.
         for m_id in range(self.num_metric_OD):
+            # is_valid = self.problemBO.validity_check(np.hstack((np.tile(point, (self.max_f_eval, 1)), config_candidates)).tolist(), object_id)
             m, sigma = self.gpOD[object_id][m_id].predict(np.hstack((np.tile(point, (self.max_f_eval, 1)), config_candidates)),
                                                           return_std=True)
+            # m = np.array([m[i] if is_valid[i] else -float('inf') for i in range(self.max_f_eval)])
             mul_mean *= m
             sum_sigma += sigma
-
         predicted_val = mul_mean + sum_sigma * self.kappa
         arg = np.argmax(predicted_val)
-        print(predicted_val.shape)
+        # print(predicted_val.shape)
+        return config_candidates[arg]
+
+    def compute_robot_arm_case(self, object_id, point):
+        max_sample = 100
+        config_candidates = self.problemBO.get_config_candidates(design=point,
+                                                                 object_id=object_id,
+                                                                 max_samples=max_sample)
+        if len(config_candidates ) is 0:
+            config_candidates = np.random.uniform(self.problemBO.vmin[self.ndesign:],
+                                                  self.problemBO.vmax[self.ndesign:],
+                                                  (self.max_f_eval, self.npolicy))
+
+        mul_mean = 1.
+        sum_sigma = 0.
+        for m_id in range(self.num_metric_OD):
+            m, sigma = self.gpOD[object_id][m_id].predict(np.hstack((np.tile(point, (len(config_candidates), 1)), config_candidates)),
+                                                          return_std= True)
+            mul_mean *= m
+            sum_sigma += sigma
+        predicted_val = mul_mean + sum_sigma * self.kappa
+        arg = np.argmax(predicted_val)
         return config_candidates[arg]
 
     def compute_max_gp_DIRECT(self, object_id, point):
@@ -296,6 +325,8 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             for m_id in range(self.num_metric_OD):
                 m, sigma = self.gpOD[object_id][m_id].predict([point.tolist() + x.tolist()],
                                                               return_std= True)
+                # if not self.problemBO.validity_check([point.tolist() + x.tolist()], object_id)[0]:
+                #     m[0] = -float('inf')
                 mul_mean *= m
                 sum_sigma += sigma
             return -(mul_mean[0] + self.kappa * sum_sigma[0]),0
@@ -338,6 +369,7 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             else:
                 non_pareto_set.append(costs[i])
         self.currentPF = pareto_set
+        self.currentPF_arg = pareto_arg
 
     def load(self, filename):
         data = pickle.load(open(filename, 'rb'))
@@ -352,7 +384,6 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
             for offOD in range(self.num_metric_OD):
                 self.gpOD[io][offOD].load(data[0], data[1])
                 data = data[2:]
-
         #TODO: reconstruct score values
         for pt_id in range(len(self.pointsOI)):
             score = []
@@ -366,12 +397,13 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
                     score_per_group /= float(len(group))
                     score.append(score_per_group)
             self.scores = np.vstack((self.scores, score))
-        # pdb.set_trace()
 
     def reconstruct_score(self, scoresOI, scoresOD):
         #scoresOD.shape
+        num_points = self.num_mc_samples
+        print('reconstruct_scores ', num_points)
         # pdb.set_trace()
-        num_points = len(scoresOI)
+
         costs = np.empty((0, self.metric_space_dim))
         for pt_id in range(num_points):
             score= []
@@ -431,7 +463,6 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
                                                (num_design_samples, (self.ndesign)))
             obj_d = [obj(design_samples[d])[0] for d in range(len(design_samples))]
             design = design_samples[np.argmin(obj_d)]
-            pdb.set_trace()
             print(obj_d, 'design', design)
         else:
             design, acquisition_val, ierror = DIRECT.solve(obj,self.problemBO.vmin[:self.ndesign],
@@ -447,6 +478,21 @@ class MultiObjectiveBOBilevel(MultiObjectiveBOGPUCB):
                 offOD+=1
 
         return points
+
+    def plot_solution(self, index):
+        #TODO: reconstruct pt
+        design = self.pointsOI[index]
+        policy = []
+        original_score = []
+        for obj_id in range(len(self.problemBO.objects)):
+            policy_obj = self.gpOD[obj_id][0].points[index][self.ndesign:]
+            policy.append(policy_obj)
+            original_score.append(self.gpOD[obj_id][0].scores[index])
+        policy = np.array(policy).T.tolist()
+        print(design, policy)
+        print(original_score)
+        self.problemBO.plot_solution(design + policy )
+
 
     def draw_plot(self, costs=None):
         plt.figure()

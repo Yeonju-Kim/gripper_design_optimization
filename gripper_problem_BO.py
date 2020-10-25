@@ -24,18 +24,18 @@ class GripperProblemBO(ProblemBO):
         print('Initializing Domain, multi-threaded evaluation using %d processes!'%GripperProblemBO.NUMBER_PROCESS)
         self.gripper=Gripper()
         self.objects=objects
-        
+
         self.policy_names=['theta'  ,'phi'         ,'beta' ,'init_pose0','init_pose1','approach_coef0','approach_coef1','init_dist','grasp_dir']
         self.policy_vmin= [0.       ,math.pi/4     ,0.     ,-math.pi/2  ,-math.pi/2  ,-1.             ,-1.             ,2.         ,-1.        ]
         self.policy_vmax= [math.pi*2,math.pi/2*0.99,math.pi, math.pi/2  , math.pi/2  , 1.             , 1.             ,3.5        , 1.        ]
         self.policy_init= [0.       ,math.pi/2*0.99,0.     , math.pi/2  , 0.         , 1.             , 1.             ,3.5        ,None       ]
         #*0.99 to phi will avoid Gimbal lock of Euler angles
-        
+
         #metric
         self.metrics=metrics
-    
+
         ProblemBO.__init__(self,design_space,policy_space)
-        
+
     def compute_metrics(self,points,parallel=True,remove_tmp=True,visualize=False):
         #create temporary file path
         if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
@@ -66,19 +66,19 @@ class GripperProblemBO(ProblemBO):
             for pt_id in range(len(points)):
                 for policy_id in range(len(self.policies)):
                     object_metrics[pt_id][policy_id]=object_metrics[pt_id][policy_id].result()
-            
+
         #remove temporary file path
         if os.path.exists(GripperProblemBO.DEFAULT_PATH) and remove_tmp:
             shutil.rmtree(GripperProblemBO.DEFAULT_PATH)
         return gripper_metrics,object_metrics
-        
+
     def compute_gripper_dependent_metrics(self,pt):
         args=self.args0
         for a,b,n,id,v in zip(self.vmin,self.vmax,self.vname,self.vpolicyid,pt):
             if id==-1:
                 assert v>=a and v<=b
                 args[n]=v
-        
+
         root=ET.Element('mujoco')
         set_simulator_option(root)
         asset=ET.SubElement(root,'asset')
@@ -86,13 +86,13 @@ class GripperProblemBO(ProblemBO):
         actuator=ET.SubElement(root,'actuator')
         link=self.gripper.get_robot(**args)
         link.compile_gripper(body,asset,actuator)
-        
+
         if not os.path.exists(GripperProblemBO.DEFAULT_PATH):
             os.mkdir(GripperProblemBO.DEFAULT_PATH)
         open(GripperProblemBO.DEFAULT_PATH+'/gripper.xml','w').write(ET.tostring(root,pretty_print=True).decode())
         model=mjc.load_model_from_path(GripperProblemBO.DEFAULT_PATH+'/gripper.xml')
         return link,[0. if m.OBJECT_DEPENDENT else m.compute(mjc.MjSim(model)) for m in self.metrics]
-    
+
     def compute_object_dependent_metrics(self,link,pt,policy,visualize):
         #create designed gripper
         for id,v in zip(self.vpolicyid,pt):
@@ -100,13 +100,13 @@ class GripperProblemBO(ProblemBO):
                 policy[id]=v
         for k,v in self.mimic:
             policy[k[0]]=[p*v for p in pt[k[1]]] if isinstance(pt[k[1]],list) else pt[k[1]]*v
-        
+
         #compile to MuJoCo
         if not GripperProblemBO.ONE_OBJECT_PER_WORLD:
             world=World()
             world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects,link=link)
             ctrl=Controller(world)
-                
+
         #then compute object-dependent metrics:
         score_obj=[]
         for id in range(len(self.objects)):
@@ -133,33 +133,33 @@ class GripperProblemBO(ProblemBO):
         z=math.sin(phi)*self.init_dist
         return [x,y,z]
 
-    def plot_solution(self,point,metric_id):
-        _,object_metrics=self.compute_metrics([point])
-        object_metrics=np.array(object_metrics)[0,:,:,metric_id].argmax(axis=0)
-        
+    def plot_solution(self,pt):
+        assert len(self.policies) == 1
+        policy = self.policies[0]
+        for id,v in zip(self.vpolicyid,pt):
+            if id>=0:
+                policy[id]=v
+        for k,v in self.mimic:
+            policy[k[0]]=[p*v for p in pt[k[1]]] if isinstance(pt[k[1]],list) else pt[k[1]]*v
+
         #compile to MuJoCo
         world=World()
-        link,_=self.compute_gripper_dependent_metrics(point)
+        link,_=self.compute_gripper_dependent_metrics(pt)
         world.compile_simulator(path=GripperProblemBO.DEFAULT_PATH,objects=self.objects,link=link)
         ctrl=Controller(world)
 
+        score_obj=[]
         viewer=mjc.MjViewer(world.sim)
-        while True:
-            for id in range(len(world.names)):
-                policy=self.policies[object_metrics[id]]
-                for id,v in zip(self.vpolicyid,pt):
-                    if id>=0:
-                        policy[id]=v
-                for k,v in self.mimic:
-                    policy[k[0]]=[p*v for p in pt[k[1]]] if isinstance(pt[k[1]],list) else pt[k[1]]*v
-                policyid=[p[id] if isinstance(p,list) else p for p in policy]
-                ctrl.reset(0 if GripperProblemBO.ONE_OBJECT_PER_WORLD else id,  \
-                           angle=policyid[0:3],init_pose=policyid[3:5], \
-                           approach_coef=policyid[5:7],init_dist=policyid[7],   \
-                           grasp_dir=policyid[8] if len(policyid)>8 else None)
-                while not ctrl.step():
-                    viewer.render()
-
+        # while True:
+        for id in range(len(world.names)):
+            policyid = [p[id] if isinstance(p, list) else p for p in policy]
+            ctrl.reset(id, angle=policyid[0:3], init_pose=policyid[3:5],
+                       approach_coef=policyid[5:7], init_dist=policyid[7],
+                       grasp_dir=policyid[8] if len(policyid) > 8 else None)
+            while not ctrl.step():
+                viewer.render()
+            score_obj.append([m.compute(ctrl) if m.OBJECT_DEPENDENT else 0. for m in self.metrics])
+        print('recomputed score', score_obj)
     def name(self):
         return 'GripperProblemBO'
 

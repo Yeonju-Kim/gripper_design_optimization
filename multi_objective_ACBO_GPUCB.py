@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class ActorCritic:
-    def __init__(self,BO,kernel,npolicy,ndesign,localOpt=True):
+    def __init__(self,BO,kernel,npolicy,ndesign,kappa,localOpt=True):
         self.BO=BO
         self.points=[]
         #the last npolicy variables of each point is policy
@@ -19,17 +19,21 @@ class ActorCritic:
         self.policies=[]
         #old policy local optimization
         self.localOpt=localOpt
-        
+        self.kappa = kappa
+
     def add_points(self,points,scores):
         #update critic
         self.critic.fit(self.points+points,self.scores+scores)
-        
+        # pdb.set_trace()
         #optimize policy for old points: local
         def obj_local(x):
             x=x.tolist()
             points=[p[:self.ndesign]+x[i*self.npolicy:i*self.npolicy+self.npolicy] for i,p in enumerate(self.points)]
             # print (-self.critic.predict(points))
-            return -self.critic.predict(points).sum()
+            m, s = self.critic.predict(points, return_std=True)
+            #TODO: find mean + sigma*kappa
+            # return -self.critic.predict(points).sum()
+            return -(m+self.kappa*s).sum()
         if self.localOpt and len(self.policies)>0:
             x=[]
             bounds=[]
@@ -48,7 +52,10 @@ class ActorCritic:
         for p in points:
             def obj_global(x,user_data):
                 design_policy=p[:self.ndesign]+x.tolist()
-                value=self.critic.predict([design_policy])
+                mean, std = self.critic.predict([design_policy], return_std=True)
+                value = mean+self.kappa*std
+                # TODO: find mean + sigma*kappa
+                # pdb.set_trace()
                 return -value[0],0
             policy,score,ierror=DIRECT.solve(obj_global,self.BO.problemBO.vmin[self.ndesign:],  \
                                              self.BO.problemBO.vmax[self.ndesign:],       \
@@ -124,7 +131,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
             self.gpOI.append(GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001))
         self.gpOD=[] #gpOD[objectid][object-dependent-metric-id]
         for o in problemBO.objects:
-            self.gpOD.append([ActorCritic(self,kernel,self.npolicy,self.ndesign,localOpt=localOpt) for m in range(self.num_metric_OD)])
+            self.gpOD.append([ActorCritic(self,kernel,self.npolicy,self.ndesign, kappa=kappa, localOpt=localOpt) for m in range(self.num_metric_OD)])
 
         self.problemBO=problemBO
         self.kappa=kappa
@@ -233,7 +240,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
     def reconstruct_estimated_score(self, scoresOI, scoresOD):
         #Same with reconstruct_score in MultiObjectiveBilevel class
 
-        num_points = len(scoresOI)
+        num_points = self.num_mc_samples
         costs = np.empty((0, self.metric_space_dim))
         for pt_id in range(num_points):
             score = []
@@ -370,6 +377,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
             else:
                 non_pareto_set.append(costs[i])
         self.currentPF = pareto_set
+        self.currentPF_arg = pareto_arg
 
     def run(self, num_grid=5, num_iter=100, log_path=None, log_interval=100, keep_latest=5):
         self.num_grid=num_grid
@@ -398,6 +406,23 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
         plt.scatter(c[:num_init_data,0],c[:num_init_data, 1], c ='cyan', s= 5)
         plt.scatter(c[num_init_data:, 0], c[num_init_data:, 1],c = 'r', s=5)
         plt.show()
+
+
+    def graph_gripper_plot(self):
+        plt.figure()
+        d= self.scores
+        for i in range(d.shape[0]):
+            plt.text(100*d[i, 0], d[i, 1], str(i), size=8)
+        init_idx = 64
+        plt.scatter(100*d[:init_idx, 0], d[:init_idx, 1], c='cyan', s=15, label='Initial designs ')
+        plt.scatter(100*d[init_idx:, 0], d[init_idx:, 1], c='blue', s=15, label='New designs')
+        # plt.scatter(-100 / p[:, 0], p[:, 1], c='r', s=5, label='Pareto fronts')
+
+        plt.legend()
+        plt.xlabel('100/Metric')
+        plt.ylabel('Elapsed Time Metric')
+        plt.show()
+
 
     def reconstruct_scores(self):
         points = self.pointsOI

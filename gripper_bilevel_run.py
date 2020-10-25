@@ -69,17 +69,22 @@ if __name__ == '__main__':
     start_time = time.time()
     BO.run(num_grid=args.num_grid, num_iter=args.num_iter, log_path=args.logpath, log_interval=args.num_iter // 10)
     print('time ---- ', time.time() - start_time)
+    BO.update_PF()
     BO.graph_gripper_plot()
+
     pdb.set_trace()
 
-    # if test:
-    #     li =[64, 188, 151, 86, 165, 104, 67, 83, 75, 88, 3, 15, 78, 91]
-    #     for i in li:
-    #         print(i)
-    #         sol = BO.points[i]
-    #         domain.plot_solution(sol,i,view= True)
-    #         ori = []
-    #         for k in range(len(BO.problemBO.objects)):
-    #             ori.append(BO.problemBO.train_label[k][i])
-    #         print(sum(ori)/len(BO.problemBO.objects))
-    #         print(BO.scores[i])
+
+    from pareto import pareto_max
+    from heuristics import farthest_first
+
+    pf, npf, ar = pareto_max(BO.scores)
+    arg_subset = farthest_first(pf, 6)
+    arg = np.where(ar)[0][arg_subset]
+    print(BO.scores[arg])
+    pdb.set_trace()
+
+    for i in arg:
+        print(i)
+        BO.plot_solution(i)
+
