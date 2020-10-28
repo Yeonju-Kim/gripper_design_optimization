@@ -286,8 +286,9 @@ class Controller:
 
         # return succeed or failed based on whether gripper is still in contact with object
         state = self.sim.get_state()
+        x = self.x_lifted[0:8]
         off = (np.array(pos[0:3]) - np.array(x[0:3])).dot(srng)
-        if abs(off) > len:
+        if off*sgn > len:
             self.shake_count += 1
             if self.shake_count >= self.shake_times:
                 self.x_shaked = self.link.fetch_q(state.qpos)

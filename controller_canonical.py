@@ -40,10 +40,10 @@ if __name__=='__main__':
     #exit()
     
     #the need for negative curvature
-    design={'base_off':0.2,'finger_length':0.25,'finger_width':0.3,'finger_curvature':-4.,'num_finger':3,'hinge_rad':0.04}
-    policy={'angle':[0.,math.pi*0.99/2,math.pi/2],'init_dist':3.5}
-    controller={'lift_height':2.5}
-    test_dataset_canonical(design,policy,controller,ids=[0])
+    #design={'base_off':0.2,'finger_length':0.25,'finger_width':0.3,'finger_curvature':-4.,'num_finger':3,'hinge_rad':0.04}
+    #policy={'angle':[0.,math.pi*0.99/2,math.pi/2],'init_dist':3.5}
+    #controller={'lift_height':2.5}
+    #test_dataset_canonical(design,policy,controller,ids=[0])
     
     #the need for positive curvature
     design={'base_off':0.2,'finger_length':0.25,'finger_width':0.3,'finger_curvature':4.,'num_finger':3,'hinge_rad':0.01}
