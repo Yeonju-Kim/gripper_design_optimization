@@ -13,8 +13,6 @@ import numpy as np
 
 
 class RobotArmDesign(DesignBase):
-    DEFAULT_PATH = ''
-
     def __init__(self, parameters):
         DesignBase.__init__(self, parameters)
         self.worldfn = 'TRINA_world.xml'
@@ -37,7 +35,6 @@ class RobotArmDesignSpace(DesignSpace):
 
 
 class RobotArmBehaviorSpace(BehaviorSpace):
-    DEFAULT_PATH = ''
     def __init__(self, behaviorSpace):
         behaviorSpace = OrderedDict(behaviorSpace)
         self.behaviorName = ['c0', 'c1', 'c2', 'c3', 'c4', 'c5']
@@ -68,7 +65,7 @@ class RobotArmBehaviorSpace(BehaviorSpace):
 
     def evaluationData(self, design, environment, behavior, visualize=False):
         """
-        return (reachability_metric, boundingBoxvolume)
+        return trajectory score
         """
         print(design.parameters, environment.name, behavior)
         initConfig = []
@@ -88,7 +85,7 @@ class RobotArmBehaviorSpace(BehaviorSpace):
         robotArmEnv = GLViewer(world, visualization=visualize)
         robotArmEnv.get_robot(*design.parameters)
         robotArmEnv.create_rigidObject(environment.name)
-
+        # #data for reachability metric
         # sc, vol = robotArmEnv.given_starting_config_score(init_config=initConfig,
         #                                                   pose=environment.pos,
         #                                                   vmax=environment.posMax,
@@ -105,14 +102,6 @@ class RobotArmBehaviorSpace(BehaviorSpace):
         return sc
 
     def visualize(self, design, behavior, envs):
-        initConfig = []
-        # idx=0
-        # for c, var in enumerate(self.behaviorName):
-        #     if idx < len(self.xname) and self.xname[idx] is var:
-        #         initConfig.append(behavior[idx])
-        #         idx += 1
-        #     else:
-        #         initConfig.append(self.behaviorInit[c])
         recomputedScore= []
         world = WorldModel()
         res = world.readFile(design.worldfn)
@@ -143,8 +132,7 @@ class RobotArmBehaviorSpace(BehaviorSpace):
         print(design.parameters, recomputedScore)
 
 
-    def ValidSamples(self, design, environment, behSampleSize, maxTrial):
-
+    def validSamples(self, design, environment, behSampleSize, maxTrial):
         world = WorldModel()
         res = world.readFile(design.worldfn)
         if not res:
@@ -159,14 +147,11 @@ class RobotArmBehaviorSpace(BehaviorSpace):
             initConfig = self.randomSample().tolist()
             position = (np.array(environment.pos) + np.random.uniform(environment.posMin, environment.posMax)).tolist()
             print(position)
-            config = robotArmEnv.local_ik_solve(position,environment.isVert, initConfig)
+            config = robotArmEnv.local_ik_solve(position, environment.isVert, initConfig)
             trial += 1
             if config is not None:
                 configs.append(config)
                 print('trial : ',trial)
-
-        # print(environment)
-        # config = robotArmEnv.local_ik_solve(position, )
         return configs
 
 class ReachabilityMetric(BehaviorMetric):
@@ -174,16 +159,14 @@ class ReachabilityMetric(BehaviorMetric):
         BehaviorMetric.__init__(self, None, 'ReachabilityMetric')
 
     def __call__(self, design, environment, behavior, data):
-        return data[0]
+        return data
 
 class TrajectoryMetric(BehaviorMetric):
     def __init__(self):
-        BehaviorMetric.__init__(self, None, 'ReachabilityMetric')
+        BehaviorMetric.__init__(self, None, 'TrajectoryMetric')
 
     def __call__(self, design, environment, behavior, data):
         return data
-
-
 
 class RobotArmEnv:
     def __init__(self, isVert, pos, posMax, posMin, name):
@@ -192,15 +175,15 @@ class RobotArmEnv:
         self.posMax = posMax
         self.posMin = posMin
         self.name = name
+
     def __str__(self):
         return 'Environment vert={self.isVert} & name={self.name}'.format(self=self)
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Bilevel Gripper optimization')
     parser.add_argument('--numD', type=int, help='Number of design samples per iteration')
     parser.add_argument('--numB', type=int, help='Number of behavior samples for each design')
-    # parser.add_argument('--bOpt', type=str, default='random', help ='direct/ random / valid')
     parser.add_argument('--kappa', type=float, help='kappa needed for policy search')
     parser.add_argument('--logPath', type=str, default='../mobbo_TRINA', help='Directory path for logging')
     parser.add_argument('--numIter', type=int, default=10, help='The number of designs that will be generated.')
@@ -209,23 +192,27 @@ if __name__ == '__main__':
     parser.add_argument('--parallel', default=True, type=lambda x: (str(x).lower() == 'true'), help='To use multiprocessing')
     args = parser.parse_args()
 
-    settings = MOBBOSettings(numIter=args.numIter, numD= args.numD, numB= args.numB, kappa =args.kappa,
-                             initializeMethod='valid',
+    settings = MOBBOSettings(numIter=args.numIter, numD=args.numD, numB=args.numB, kappa=args.kappa,
+                             initializeMethod='valid', mc=args.numMCSamples,
                              behOptimizationMethod='valid', parallel=args.parallel, numInitBeh=10, numInitDes=10)
-    #num initial samples = numInitBeh * numInitDes if initializeMethod == valid
 
+    # Set Bounding boxes for each scenario
     pos = [[0.7, 0.3, 0.0], [0.9, 0.3, 0.2], [0.7, 0.3, 0.7], [0.7, 0.3, 0.7], [0.7, 0.3, 1.3]]
     posMax = [[0.2, 0.4, 0.5], [0.2, 0.4, 0.5], [0.3, 0.5, 0.5], [0.3, 0.5, 0.5], [0.2, 0.4, 0.5]]
     posMin = [[-0.2, -0.4, 0.0], [-0.2, -0.4, 0.0], [-0.3, -0.5, 0.0], [-0.3, -0.5, 0.0], [-0.2, -0.4, 0.0]]
     isVert = [True, False, True, False, False]
     name = [None, 'low_shelf', 'table', 'table', 'high_shelf']
 
+    # Environments
     envs = [RobotArmEnv(isVert[i], pos[i], posMax[i], posMin[i], name[i]) for i in range(5)]
 
+    # Behavior Space
     behaviorSpace = [('c0', None), ('c1', None), ('c2', None), ('c3', None), ('c4',None), ('c5', None)]
-
-    robotArmDesignSpace = RobotArmDesignSpace()
     robotArmBehSpace = RobotArmBehaviorSpace(behaviorSpace)
+
+    # Design Space
+    robotArmDesignSpace = RobotArmDesignSpace()
+
     robotArmProblem = CodesignProblem(designSpace=robotArmDesignSpace, behaviorSpace=robotArmBehSpace,
                                       environments=envs, behaviorMetrics=[TrajectoryMetric()],
                                       name='robotArmPlacement', mean=False)

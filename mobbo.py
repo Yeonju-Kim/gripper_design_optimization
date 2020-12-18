@@ -11,7 +11,7 @@ class MOBBOSettings:
     def __init__(self, numIter, numD, numB, kappa, behOptimizationMethod,
                  initializeMethod='random', parallel = True, nu =2.5, mc = 1000,
                  numInitDes = 10, numInitBeh = 2):
-        self.initializeMethod = initializeMethod #optimize or random
+        self.initializeMethod = initializeMethod #optimize/random
         self.numInitialDesignSamples = numInitDes
         self.numInitialBehaviorSamples = numInitBeh
 
@@ -80,7 +80,7 @@ class MOBBO:
         dbest = None
         gbest = -float('inf')
         for i in range(settings.numBehaviorEvals):
-            b = self.problem.behaviorSpace.sample(design,environment)
+            b = self.problem.behaviorSpace.randomSample(design,environment)
             if not self.problem.behaviorSpace.isValid(design,environment,b):
                 continue
             data = self.problem.behaviorSpace.evaluationData(design,environment,b)
@@ -103,7 +103,6 @@ class MOBBO:
             settings = self.settings
 
         if settings.behOptimizationMethod == 'random':
-            #TODO: add isValid
             behCandidates = []
             for t in range(settings.maxTrial):
                 newSample = self.problem.behaviorSpace.randomSample()
@@ -131,7 +130,7 @@ class MOBBO:
             return behavior, score
         elif settings.behOptimizationMethod == 'valid':
             robotDesign = self.problem.designSpace.makeDesign(design)
-            behCandidates = self.problem.behaviorSpace.ValidSamples(robotDesign, self.problem.environments[envid],
+            behCandidates = self.problem.behaviorSpace.validSamples(robotDesign, self.problem.environments[envid],
                                                                     settings.numBehaviorEvals, settings.maxTrial)
             if len(behCandidates) == 0:
                 behCandidates = [self.problem.behaviorSpace.randomSample() for i in range(settings.numBehaviorEvals)]
@@ -226,7 +225,7 @@ class MOBBO:
                     if fail:
                         break
                     for i, e in enumerate(self.problem.environments):
-                        beh = self.problem.behaviorSpace.ValidSamples(self.problem.designSpace.makeDesign(design),
+                        beh = self.problem.behaviorSpace.validSamples(self.problem.designSpace.makeDesign(design),
                                                                       e, 1, settings.maxTrial)
                         if len(beh) == 0:
                             fail = True
@@ -301,15 +300,16 @@ class MOBBO:
         return design, behaviors
 
     def acquisitionFunction(self, design, behaviors):
+        '''
+        metricweights = [[1/3, 1/3, 1/3, 0, 0], [0, 0, 0, 1/2, 1/2]]
+        metricWeights.shape = (P, |E|)
+        '''
         M = len(self.problem.behaviorMetrics)
         P = self.problem.metricWeights.shape[0]
         numSamples = self.settings.numMCSamples
         dMetricSamples = np.empty((0, numSamples))
         bMetricSamples = np.empty((M*P, numSamples))
-        '''
-        metricweights = [[1/3, 1/3, 1/3, 0, 0], [0, 0, 0, 1/2, 1/2]]
-        metricWeights.shape = (P, |E|)
-        '''
+
         for m in range(len(self.problem.designMetrics)):
             samples = self.dSurrogate[m].sample_y([design], numSamples)
             dMetricSamples = np.vstack((dMetricSamples, samples))

@@ -41,7 +41,7 @@ class GripperDesign(DesignBase):
 
 class GripperDesignSpace(DesignSpace):
     def __init__(self, designSpace):
-        """designSpace = [('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))] """
+        """example: designSpace = [('finger_length',(0.2,0.5)),('finger_curvature',(-2,2))] """
         designSpace = OrderedDict(designSpace)
         self.args0 = {}
         xmin = []
@@ -107,7 +107,6 @@ class GripperBehaviorSpace(BehaviorSpace):
         link = design.getDesign()
         control = []
         idx = 0
-        print(behavior)
 
         for c, var in enumerate(self.behaviorName):
             if idx < len(self.xname) and self.xname[idx] is var:
@@ -172,7 +171,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     behOptMethod = 'direct' if args.useDirect else 'random'
     settings = MOBBOSettings(numIter=args.numIter, numD= args.numD, numB= args.numB, kappa=args.kappa,
-                             behOptimizationMethod=behOptMethod, parallel=args.parallel)
+                             behOptimizationMethod=behOptMethod, parallel=args.parallel, mc=args.numMCSamples)
 
     from dataset_canonical import get_dataset_canonical
     envs = get_dataset_canonical()  # object list

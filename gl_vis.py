@@ -1,10 +1,7 @@
 from klampt import *
-from klampt.vis import GLRealtimeProgram,GLPluginInterface
-from klampt.vis.glcommon import GLWidgetPlugin
 from klampt.vis.visualization import VisualizationPlugin
 from klampt import vis
 import pdb
-from klampt import PointPoser, RobotPoser, WidgetSet
 import math
 import numpy as np
 from klampt.math import vectorops,so3,se3
@@ -419,7 +416,7 @@ class GLViewer(VisualizationPlugin):
         self.set_partial_config(init_config)
         return configurations, score, (volume_mean, volume_std)
 
-    def trajectory_score(self, is_vert, init_config, pose, vmax, vmin, is_vis = False, is_left=True):
+    def trajectory_score(self, is_vert, init_config, pose, vmax, vmin, is_vis=False, is_left=True):
         #TODO: pick two points in the self.positions
         # pos_arg = np.random.choice(len(self.positions), 3, replace=False)
         # milestones = [self.positions[i] for i in range(len(pos_arg))]
@@ -469,12 +466,6 @@ class GLViewer(VisualizationPlugin):
         return np.mean(score)
 
 
-
-        pdb.set_trace()
-        # retrun average_score
-
-
-
     def local_ik_solve(self, pos, is_vert, init_config, is_left=True):
         assert len(init_config) == 6
         success = False
@@ -514,7 +505,6 @@ class GLViewer(VisualizationPlugin):
                 success = True
                 print('success')
                 print(pos)
-                # vis.run(self)
         if success:
             return self.robot.getConfig()[activeDOF_range]
         else:
@@ -523,26 +513,8 @@ class GLViewer(VisualizationPlugin):
 
     def given_starting_config_score(self, init_config, pose, vmin, vmax, is_vertical, is_left, nrTrial = 20):
         self.grid_EE_position(pose, vmin, vmax)
-        self.trajectory_score(is_vertical, init_config, is_left)
-        # if is_left:
-        #     activeDOF_range = slice(self.left_active_dof[0], self.left_active_dof[-1] + 1)
-        # else:
-        #     activeDOF_range = slice(self.right_active_dof[0], self.right_active_dof[-1] + 1)
-
-        # workspace position version
-        # goal_pose= ((np.array(vmax) - np.array(vmin) )* np.array(init_config) + np.array(pose)).tolist()
-
-        # is_valid = self.IK_solve_starting_pose(goal_pose, is_vertical, is_left)
-        # if not is_valid:
-        #     print('is not valid')
-        #     return 0, 0
-        # else:
-
-        # init_config = self.robot.getConfig()[activeDOF_range]
-        # print('valid config, ', init_config)
         configs, score, volume = self.solve_IK(init_config, is_left, is_vertical)
         return score, 0.5-volume[0]
-
 
 
     def IK_solve_starting_pose(self, starting_pose, is_vertical, is_left):
@@ -593,10 +565,10 @@ class GLViewer(VisualizationPlugin):
             success = True
         return success
 
-
     def remove_rigidObject(self):
         if self.world.numRigidObjects() > 0:
             self.world.remove(self.world.rigidObject(0))
+
     def vis_reset(self):
         self.clear()
         self.add('world', self.world)
