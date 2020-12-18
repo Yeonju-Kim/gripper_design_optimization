@@ -255,7 +255,7 @@ class CodesignProblem:
         metricWeights (np.ndarray): array of shape (m,len(environments))
             dictating the map from behavior metrics to design metric space.
             Default measures average performance
-        metricWeightLabels (list of str): list of length m giving each
+        metricWeightsLabels (list of str): list of length m giving each
             sub-metric's name, one for each row of metricWeights.
     """
     def __init__(self,designSpace,behaviorSpace=None,environments=None,
