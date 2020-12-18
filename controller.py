@@ -4,12 +4,13 @@ from compile_objects import *
 import mujoco_py as mjc
 import trimesh as tm
 import numpy as np
-import math,copy
+import math, copy
+
 
 class Controller:
     def __init__(self, world, *, approach_vel=0.5, thres_vel=5e-1, \
                  lift_vel=1.0, lift_height=3, \
-                 shake_range=[0.4, 0, 0], shake_vel=15.0, shake_times=10, step_limit=1000):
+                 shake_range=[0.2, 0, 0], shake_vel=15.0, shake_times=2500, step_limit=1000):
         self.world = world
         self.sim = self.world.sim
         if self.world.link is None:
@@ -28,6 +29,7 @@ class Controller:
         # lift
         self.lift_vel = lift_vel
         self.lift_height = lift_height
+        self.lift_timestep = 500
         # shake
         self.shake_range = shake_range
         self.shake_vel = shake_vel
@@ -148,15 +150,15 @@ class Controller:
 
             for idx in range(len(self.link_geom_ids)):
                 contact_all_geoms[idx] = contact_all_geoms[idx] or (
-                            c.geom1 in self.link_geom_ids[idx] and c.geom2 in self.world.target_geom_ids)
+                        c.geom1 in self.link_geom_ids[idx] and c.geom2 in self.world.target_geom_ids)
                 contact_all_geoms[idx] = contact_all_geoms[idx] or (
-                            c.geom2 in self.link_geom_ids[idx] and c.geom1 in self.world.target_geom_ids)
+                        c.geom2 in self.link_geom_ids[idx] and c.geom1 in self.world.target_geom_ids)
 
             for leafid in range(len(self.leaf_link_geom_ids)):
                 gcleaf[leafid] = gcleaf[leafid] or (
-                            c.geom1 in self.leaf_link_geom_ids[leafid] and c.geom2 in self.world.target_geom_ids)
+                        c.geom1 in self.leaf_link_geom_ids[leafid] and c.geom2 in self.world.target_geom_ids)
                 gcleaf[leafid] = gcleaf[leafid] or (
-                            c.geom2 in self.leaf_link_geom_ids[leafid] and c.geom1 in self.world.target_geom_ids)
+                        c.geom2 in self.leaf_link_geom_ids[leafid] and c.geom1 in self.world.target_geom_ids)
         return floor_contact, obj_contact, sum(contact_all_geoms) > 3  # all(gcleaf)
 
     def object_contact_state(self):
@@ -226,7 +228,7 @@ class Controller:
             self.keep_closing_count = 0
         else:
             self.close_count += 1
-            if self.close_count > self.close_steps:
+            if self.close_count >= self.close_steps:
                 return False
         return True
 
@@ -246,9 +248,8 @@ class Controller:
         self.sim.step()
         self.elapsed += 1
 
-        # return succeed or failed based on whether gripper is still in contact with object
         state = self.sim.get_state()
-        if height > self.lift_height:
+        if self.elapsed >= self.lift_timestep:
             if not self.object_contact_state():
                 self.x_lifted = self.link.fetch_q(state.qpos)
                 self.lifted = True
@@ -258,23 +259,22 @@ class Controller:
         return True
 
     def shake(self):
-        sgn = 1 if self.shake_count % 2 == 0 else -1
+        time_coord = float(self.shake_count) * 2 * np.pi / 500.
+        sgn = 1 if np.cos(time_coord) > 0 else -1
         state = self.sim.get_state()
-        pos = np.array([state.qpos[self.link.joint_ids[d]] for d in range(3)])
         srng = np.array(self.shake_range)
         len = np.linalg.norm(srng)
         srng *= 1 / len
 
         x = self.x_lifted[0:8]
         pos0 = np.array(x[0:3]) - np.array(x[0:3]).dot(srng) * srng
-        pos0 += srng * (pos.dot(srng) + len * sgn)
+        pos0 += len * np.sin(time_coord) * srng
         x[0:3] = pos0.tolist()
-
         qpos = self.link.fetch_q(state.qpos)
         x[6:8] = [qpos[6] - self.approach_vel * self.approach_coef[0],
                   qpos[7] - self.approach_vel * self.approach_coef[1]]
-        vx = [0 for i in range(6)] + [-self.approach_vel * self.approach_coef[0],
-                                      -self.approach_vel * self.approach_coef[1]]
+        vx = [0 for i in range(6)] +\
+             [-self.approach_vel * self.approach_coef[0], -self.approach_vel * self.approach_coef[1]]
         vx[0:3] = [v * sgn * self.shake_vel for v in srng]
         self.link.set_PD_target(x, vx)
         self.link.define_ctrl(self.sim, state.qpos, state.qvel)
@@ -284,20 +284,16 @@ class Controller:
         if self.object_contact_state():  # if floor contacts object
             return False
 
-        # return succeed or failed based on whether gripper is still in contact with object
         state = self.sim.get_state()
-        x = self.x_lifted[0:8]
-        off = (np.array(pos[0:3]) - np.array(x[0:3])).dot(srng)
-        if off*sgn > len:
-            self.shake_count += 1
-            if self.shake_count >= self.shake_times:
-                self.x_shaked = self.link.fetch_q(state.qpos)
-                self.shaked = True
-                return True
+        self.shake_count += 1
+        if self.shake_count >= self.shake_times:
+            self.x_shaked = self.link.fetch_q(state.qpos)
+            self.shaked = True
+            return True
         return True
-    
-    def step(self,will_close=True,will_lift=True,will_shake=True):
-        #this function return whether an experiment has finished
+
+    def step(self, will_close=True, will_lift=True, will_shake=True):
+        # this function return whether an experiment has finished
         if not self.approached:
             if not self.approach():
                 return True
@@ -315,3 +311,4 @@ class Controller:
                 return True
             return False
         return True
+

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 class ActorCritic:
-    def __init__(self,BO,kernel,npolicy,ndesign,kappa,localOpt=True):
+    def __init__(self,BO,kernel,npolicy,ndesign,kappa,maxf_for_global_opt, localOpt=True):
         self.BO=BO
         self.points=[]
         #the last npolicy variables of each point is policy
@@ -20,7 +20,7 @@ class ActorCritic:
         #old policy local optimization
         self.localOpt=localOpt
         self.kappa = kappa
-
+        self.maxf = maxf_for_global_opt
     def add_points(self,points,scores):
         #update critic
         self.critic.fit(self.points+points,self.scores+scores)
@@ -59,7 +59,7 @@ class ActorCritic:
                 return -value[0],0
             policy,score,ierror=DIRECT.solve(obj_global,self.BO.problemBO.vmin[self.ndesign:],  \
                                              self.BO.problemBO.vmax[self.ndesign:],       \
-                                             logfilename='../direct.txt',algmethod=1)
+                                             logfilename='../direct.txt',algmethod=1, maxf=self.maxf)
             self.policies.append(self.logit_transform(policy.tolist()))
         self.actor.fit([pt[:self.ndesign] for pt in self.points],self.policies)
         
@@ -107,7 +107,7 @@ class ActorCritic:
         return [self.points,self.scores,self.policies]
 
 class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
-    def __init__(self,problemBO, num_mc_samples, partition, d_sample_size, use_direct_for_design,
+    def __init__(self,problemBO, num_mc_samples, partition, d_sample_size, use_direct_for_design, maxf,
                  kappa=10.,nu=2.5,length_scale=1.,localOpt=True):
         if nu is not None:
             kernel=Matern(nu=nu,length_scale=length_scale)
@@ -131,13 +131,14 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
             self.gpOI.append(GaussianProcessScaled(kernel=kernel,n_restarts_optimizer=25,alpha=0.0001))
         self.gpOD=[] #gpOD[objectid][object-dependent-metric-id]
         for o in problemBO.objects:
-            self.gpOD.append([ActorCritic(self,kernel,self.npolicy,self.ndesign, kappa=kappa, localOpt=localOpt) for m in range(self.num_metric_OD)])
+            self.gpOD.append([ActorCritic(self,kernel,self.npolicy,self.ndesign, kappa=kappa, maxf_for_global_opt= maxf,
+                                          localOpt=localOpt) for m in range(self.num_metric_OD)])
 
         self.problemBO=problemBO
         self.kappa=kappa
-        if len(self.problemBO.metrics)==1:
-            raise RuntimeError('MultiObjectiveBO passed with single metric!')
-
+        # if len(self.problemBO.metrics)==1:
+        #     raise RuntimeError('MultiObjectiveBO passed with single metric!')
+        self.maxf = maxf
         self.partition = partition
         self.metric_space_dim = self.num_metric_OI + self.num_metric_OD*len(partition)
         self.scores = np.empty((0, self.metric_space_dim))
@@ -177,6 +178,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                                                (self.d_sample_size, (self.ndesign)))
             obj_d = [obj(design_samples[d])[0] for d in range(len(design_samples))]
             design = design_samples[np.argmin(obj_d)]
+            print(obj_d)
         design=design.tolist()
         
         #recover solution point
@@ -439,7 +441,7 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                         meanScore = 0.
                         for io in group:
                             meanScore += self.gpOD[io][imOD].scores[ip]
-                        score.append(meanScore/len(self.problemBO.objects))
+                        score.append(meanScore/float(len(group)))
                     imOD+=1
             self.scores = np.vstack((self.scores, score))
     
@@ -502,10 +504,12 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                     imOI+=1
                 else:
                     for group in self.partition:
-                        meanScore = 0.
+                        score_per_group = 0.
                         for io in group:
-                            meanScore += scoresOD[ip][io][imOD+self.num_metric_OI]
-                        score.append(meanScore/len(self.problemBO.objects))
+                            score_per_group += scoresOD[ip][io][imOD+self.num_metric_OI]
+                        score_per_group /= float(len(group))
+                        score.append(score_per_group)
+                        # TODO: error: score.append(meanScore/len(self.problemBO.objects))
                     imOD+=1
             self.scores = np.vstack((self.scores, score))
                     
@@ -517,9 +521,9 @@ class MultiObjectiveACBOGPUCB(MultiObjectiveBOGPUCB):
                     
     def name(self):
         if self.use_direct_for_design:
-            return 'ACBO-DIRECT('+self.problemBO.name()+')'+'k='+str(self.kappa)+'d='+str(self.d_sample_size)
+            return 'ACBO-DIRECT('+self.problemBO.name()+')'+'k='+str(self.kappa)+'d='+str(self.d_sample_size)+'maxf='+str(self.maxf)
         else:
-            return 'ACBO-uniform('+self.problemBO.name()+')'+'k='+str(self.kappa)+'d='+str(self.d_sample_size)
+            return 'ACBO-uniform('+self.problemBO.name()+')'+'k='+str(self.kappa)+'d='+str(self.d_sample_size)+'maxf='+str(self.maxf)
 
 
 if __name__=='__main__':

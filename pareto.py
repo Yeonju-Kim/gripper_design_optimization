@@ -1,9 +1,15 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
 import pdb
 import seaborn as sns
 sns.set()
 sns.set_style("ticks")
+matplotlib.rcParams['axes.linewidth'] = 1
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+plt.rc('font',size=45)
+
 
 def pareto_max(costs ):
     pareto_set = []
@@ -38,23 +44,25 @@ def coverage_metric(costs, comp):
     return sum(is_efficient)/float(len(costs))
 def graph_pareto_init(p, d, arg=None):
     plt.figure()
-    ss = np.argsort(p[:, 0])
-
-    # pdb.set_trace()
-    if arg is not None:
-        for i in range(p.shape[0]):
-            idx = np.argwhere(ss == i)[0][0]
-            # pdb.set_trace()
-            plt.text(-1/p[i, 0] + 0.5, p[i, 1]+0.01, str(idx+1), size=10)
+    # ss = np.argsort(p[:, 0])
+    # if arg is not None:
+    #     for i in range(p.shape[0]):
+    #         idx = np.argwhere(ss == i)[0][0]
+    #         # pdb.set_trace()
+    #         plt.text(-1/p[i, 0] + 0.5, p[i, 1]+0.01, str(idx+1), size=10)
     init_idx = 64
     plt.scatter(-1/d[:init_idx, 0], d[:init_idx, 1], c='cyan', s= 10, label ='Initial designs ')
     plt.scatter(-1/d[init_idx:, 0], d[init_idx:, 1], c= 'blue', s = 10, label = 'New designs')
     plt.scatter(-1/p[:, 0], p[:, 1] , c= 'r', s= 10, label = 'Pareto fronts')
     plt.xlim(-240, -80)
-    plt.ylim(0, 1.8)
-    plt.legend(loc='best')
-    plt.xlabel('-Mass ')
-    plt.ylabel('Elapsed Time')
+    plt.xticks(fontsize=13)
+    plt.yticks(fontsize=13)
+    plt.ylim(0, 3.5)
+    plt.legend(loc='lower left', fontsize=15)
+    plt.xlabel('-Mass', fontsize=18)
+    plt.ylabel('Elapsed Time', fontsize=18)
+    plt.savefig("Bilevel.pdf",bbox_inches='tight',pad_inches=0)
+
     # plt.show()
 def graph_pareto_init_100overmass(p, d):
     plt.figure()
@@ -166,16 +174,21 @@ def hypervolume2d(data):
 
 if __name__ == '__main__':
     # data = np.load('scores.npy')
-    data  = np.load('../data_gripper/BILEVEL-DIRECT(GripperProblemBO)k=2.0d=20fmax=1000fin.npy')
-    # data1= np.load('BILEVEL-uniform(GripperProblemBO)k=2.0d=20fmax=1000fin.npy')
+    #TODO: FInal gripper results
+    # data  = np.load('ACBO-uniform(GripperProblemBO)k=2.0d=20maxf=20000fin.npy')
+    # data1= np.load('../data_gripper/BILEVEL-DIRECT(GripperProblemBO)k=2.0d=20fmax=1000fin.npy')
+    data= np.load('BILEVEL-DIRECT(GripperProblemBO)k=2.0d=20fmax=1000.npy')
+    # data1 = np.load('newBILEVEL-uniform(GripperProblemBO)k=2.0d=20fmax=1000.npy')
+    # data1= np.load('../data_gripper/BILEVEL-DIRECT(GripperProblemBO)k=2.0d=20fmax=1000fin.npy')
+    # data1=np.load('../data_gripper/BILEVEL-DIRECT(GripperProblemBO)k=2.0d=50fmax=100002.npy')
+    # data2=np.load('../data_gripper/BILEVEL-DIRECT(GripperProblemBO)k=2.0d=50fmax=100003.npy')
     # data2 = np.load('BILEVEL-DIRECT(GripperProblemBO)k=2.0d=10fmax=1000fin.npy')
     # data3 = np.load('BILEVEL-uniform(GripperProblemBO)k=2.0d=10fmax=1000fin.npy')
     # data4 = np.load('../data_gripper/BILEVEL-uniform(GripperProblemBO)k=10.0d=100fmax=1000.npy')
     pareto, npareto, ar = pareto_max(data)
-    # pdb.set_trace()
     graph_pareto_init(pareto, data, np.where(ar)[0])
-    # pareto1, _, _ = pareto_max(data1)
-    # graph_pareto_init(pareto1, data1)
+    # pareto1, _, ar1 = pareto_max(data1)
+    # graph_pareto_init(pareto1, data1,np.where(ar1)[0])
     # pareto2, _, _ = pareto_max(data2)
     # graph_pareto_init(pareto2, data2)
     # pareto3,_, _ = pareto_max(data3)

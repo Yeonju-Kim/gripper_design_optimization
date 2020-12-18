@@ -320,8 +320,8 @@ class Gripper:
         return scene,trans
             
     def get_robot(self,base_off=0.4,num_finger=3,num_segment=3,*,finger_width=None,finger_length=None,finger_curvature=None,base_rad=None,hinge_rad=None):
-        num_finger=round(num_finger)
-        num_segment=round(num_segment)
+        num_finger=round(float(num_finger))
+        num_segment=round(float(num_segment))
         fingerTop,transF=self.get_finger(top_hinge=False,bot_hinge=True,    \
                                          finger_width=finger_width,finger_length=finger_length, \
                                          finger_curvature=finger_curvature,hinge_rad=hinge_rad)

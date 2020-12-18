@@ -45,7 +45,21 @@ def furthest_points(data):
                 max_dist = dist
     return np.asarray(arg_extreme)
 
+def normalize_data(data):
+    # pdb.set_trace()
+    dim = data.shape[1]
+    max = np.max(data, axis =0)
+    min = np.min(data, axis=0)
+    result = np.zeros(data.shape)
+    for i in range(dim):
+        result[:,i ] = (data[:, i]- min[i])/(max[i]-min[i])
+    return result
+
 def farthest_first(data, k):
+    #TODO: normalize data
+    original_data = data
+    data = normalize_data(data)
+
     selected = furthest_points(data)
     # selected = smallest_points(data)
     bool_selected = np.zeros(data.shape[0]).astype(bool)
@@ -70,7 +84,7 @@ def farthest_first(data, k):
         arg_subset.append(arg_selected)
 
     if data.shape[1] == 2:
-        graph(subset, data)
+        graph(arg_subset, original_data)
     elif data.shape[1] == 3:
         graph_3d(subset, data)
 
@@ -169,20 +183,22 @@ def is_pareto_simple_max(data):
 
     return pareto_set, non_pareto_set
 
-def graph(data, original):
+def graph(arg_subset, original):
     plt.figure(figsize=(5,5))
+    data = original[arg_subset]
     plt.scatter(data[:, 0], data[:,1], c='b')
     plt.scatter(original[:,0], original[:,1 ], c= 'r', s=5)
     plt.show()
 
-def graph_3d(data, original):
+def graph_3d(data, original =None):
     fig = plt.figure()
     ax = plt.axes(projection='3d')
 
     # Data for a three-dimensional line
     ax.scatter3D(data[:, 0], data[:, 1], data[:,2], c= 'r', s = 20 )
-    ax.scatter3D(original[:, 0], original[:,1], original[:, 2] , c= 'gray' , s= 2)
-    # plt.show()
+    if original is not None:
+        ax.scatter3D(original[:, 0], original[:,1], original[:, 2] , c= 'gray' , s= 2)
+    plt.show()
 
 def sphere_coordinates(n):
     theta = np.random.uniform(size = (n, 1))* np.pi/2

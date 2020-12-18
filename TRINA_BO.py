@@ -37,6 +37,8 @@ class RobotArmProblemBO(ProblemBO):
         self.metrics= [ReachabilityMetric()]# BoundingBoxMetric()]
         self.design_space = [('distance', (0.05, 0.3)), ('pan', (0, 90)), ('tilt', (-45, 135))]
         ProblemBO.__init__(self, self.design_space, policy_space)
+        self.nominal_config= [-5.514873331776197, 4.54462894654496, -5.916490220124983,
+                              5.384545803127709, -4.695740116927796, 0.5840738805492091]
 
     def initialize(self, num_init_data):
         initial_pts= []
@@ -115,11 +117,11 @@ class RobotArmProblemBO(ProblemBO):
 
         robot_arm_env.create_rigidObject(self.objects[object_id])
         while len(configs) < max_samples and num_local_ik < max_eval:
-            if len(configs) is 0 or np.random.uniform() > 0.7:
-                init_config = np.random.uniform(self.vmin[len(self.design_space):],
-                                                self.vmax[len(self.design_space):]).tolist()
-            else:
-                init_config = configs[np.random.choice(len(configs), 1)[0]]
+            # len(configs) is 0 or np.random.uniform() > 0.7:
+            init_config = np.random.uniform(self.vmin[len(self.design_space):],
+                                            self.vmax[len(self.design_space):]).tolist()
+            # else:
+            #     init_config = configs[np.random.choice(len(configs), 1)[0]]
             position = np.random.uniform(min_xyz, max_xyz).tolist()
             print('design,', design)
             config = robot_arm_env.local_ik_solve(position, self.is_vert[object_id], init_config)
@@ -146,7 +148,7 @@ class RobotArmProblemBO(ProblemBO):
                 raise RuntimeError('Unable to load model')
 
             # There's no Object-dependent metric in this problem
-            robot_arm_env = GLViewer(world, visualization=False, shelf=self.shelf, table=self.table)
+            robot_arm_env = GLViewer(world, visualization=visualize, shelf=self.shelf, table=self.table)
             robot_arm_env.get_robot(*points[pt_id][:len(self.design_space)])
             print(points[pt_id][:len(self.design_space)])
             policy_metrics= []
@@ -168,8 +170,8 @@ class RobotArmProblemBO(ProblemBO):
                                                                        is_vertical= self.is_vert[i], is_left= True)
                     if sc> 0 :
                         print(sc, vol)
-                        # vis.run(robot_arm_env)
-                        # pdb.set_trace()
+                    if visualize:
+                        vis.run(robot_arm_env)
                     robot_arm_env.remove_rigidObject()
                     robot_arm_env.vis_reset()
                     object_metrics.append([sc])
@@ -190,7 +192,9 @@ class RobotArmProblemBO(ProblemBO):
 
         robot_arm_env.get_robot(*point[:len(self.design_space)])
         print(point[:len(self.design_space)])
+        # robot_arm_env.set_partial_config(self.nominal_config, is_both=True)
         # vis.run(robot_arm_env)
+        # return
         policy_metrics = []
         for policy in self.policies:
             # init policy
@@ -235,7 +239,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     nu = 2.5
     policy_space = [('c0', None), ('c1', None), ('c2', None), ('c3', None), ('c4',None), ('c5', None)]
-    # policy_space = [('x', None), ('y', None), ('z', None)]
     problembo = RobotArmProblemBO(policy_space)
 
     BO = MultiObjectiveBOBilevel(problemBO=problembo, d_sample_size=args.num_design_samples,
@@ -269,12 +272,8 @@ if __name__ == '__main__':
     arg_subset = farthest_first(pf, 5)
     arg = np.where(ar)[0][arg_subset]
     print(BO.scores[arg])
-    pdb.set_trace()
 
     for idx in arg:
         print(arg >=100, 'arg > 100')
-        # if idx>=100:
         BO.plot_solution(idx)
 
-
-    pdb.set_trace()

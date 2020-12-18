@@ -10,16 +10,18 @@ import numpy as np
 from klampt.math import vectorops,so3,se3
 from klampt.model import ik, collide
 import pickle
+from klampt.model import trajectory
 
 
 class GLViewer(VisualizationPlugin):
-    def __init__(self, world, visualization, shelf, table):
+    def __init__(self, world, visualization, shelf=None, table = None):
         VisualizationPlugin.__init__(self)
         self.grid_size = 0.05 #5cm
         self.world = world
         self.is_vis = visualization
-        self.shelf_dim, self.low_shelf_pos, self.high_shelf_pos = shelf
-        self.table_dim, self.table_pos = table
+        self.shelf_dim, self.low_shelf_pos, self.high_shelf_pos =\
+            ([0.8, 0.4, 0.5], [0.9, 0.3, 0.2], [0.7, 0.3, 1.3]) if shelf is None else shelf
+        self.table_dim, self.table_pos = ([1.0, 0.6, 0.7], [0.7, 0.3, 0]) if table is None else table
 
         self.robot = world.robot(0)
         self.leftEELink = self.robot.link(14)
@@ -170,25 +172,39 @@ class GLViewer(VisualizationPlugin):
         self.robot.link(4).setParentTransform(new_body_right, T_body_right[1])
 
 
-    def set_partial_config(self, arm_config, is_left=True, trans=0.2,rot = 0.,):
+    def set_partial_config(self, arm_config, is_left=True, trans=0.2,rot = 0.,is_both = False):
         assert len(arm_config) == 6
         baseQ = [0,trans,rot,0,0,0,0]
-        if is_left:
+
+        if is_both:
             leftArmQ = [0] + arm_config + [0]
             leftGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-            rightArmQ = [0, -2.34, 4.84, -1.4, -0.12, -0.36, 0, 0]
+            rightArmQ = [0] + [-arm_config[0], np.pi- arm_config[1], -arm_config[2] ,np.pi-arm_config[3], -arm_config[4], -arm_config[5]] + [0]
             rightGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
             q = baseQ + leftArmQ + leftGripperQ + rightArmQ + rightGripperQ
             self.robot.setConfig(q)
-            # self.robotWidget.set(q)
         else:
-            rightArmQ = [0] + arm_config + [0]
-            rightGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-            leftArmQ = [0, -2.34, 4.84, -1.4, -0.12, -0.36, 0, 0]
-            leftGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
-            q = baseQ + leftArmQ + leftGripperQ + rightArmQ + rightGripperQ
-            self.robot.setConfig(q)
-            # self.robotWidget.set(q)
+            if is_left:
+                leftArmQ = [0] + arm_config + [0]
+                leftGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+                left_arm_nominal =[-5.514873331776197, 4.54462894654496, -5.916490220124983,
+                              5.384545803127709, -4.695740116927796, 0.5840738805492091]
+                rightArmQ = [0] + [-left_arm_nominal[0], np.pi- left_arm_nominal[1],
+                                    -left_arm_nominal[2] ,np.pi-left_arm_nominal[3], -left_arm_nominal[4],
+                                    -left_arm_nominal[5]] +[0]
+                rightGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+                q = baseQ + leftArmQ + leftGripperQ + rightArmQ + rightGripperQ
+                self.robot.setConfig(q)
+                # self.robotWidget.set(q)
+
+            else:
+                rightArmQ = [0] + arm_config + [0]
+                rightGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+                leftArmQ = [0, -2.34, 4.84, -1.4, -0.12, -0.36, 0, 0]
+                leftGripperQ = [0, 0, 0, 0, 0, 0, 0, 0, 0]
+                q = baseQ + leftArmQ + leftGripperQ + rightArmQ + rightGripperQ
+                self.robot.setConfig(q)
+                # self.robotWidget.set(q)
 
 
     def gripper_transform(self, is_left=True):
@@ -224,6 +240,19 @@ class GLViewer(VisualizationPlugin):
         self.grid_id = [(self.grid_id[i][0], self.grid_id[i][1], self.grid_id[i][2])for i in range(len(self.grid_id))]
 
         self.grid_pos_dict = dict(zip(self.grid_id, self.positions))
+
+        #TODO: milestone points in bounding box
+        max_xyz = [pose[i] + xyz_max[i] for i in range(3)]
+        min_xyz = [pose[i] + xyz_min[i] for i in range(3)]
+        mid_xyz = [(max_xyz[i] + min_xyz[i])/2. for i in range(3)]
+
+        self.trajectory_milestones = [[max_xyz, min_xyz],
+                                      [[max_xyz[0], min_xyz[1], max_xyz[2]], [min_xyz[0], max_xyz[1], min_xyz[2]]],
+                                      [[mid_xyz[0], max_xyz[1], mid_xyz[2]], [mid_xyz[0], min_xyz[1], mid_xyz[2]]],
+                                      [[min_xyz[0], min_xyz[1], max_xyz[2]], [max_xyz[0], max_xyz[1], min_xyz[2]]],
+                                      [[min_xyz[0], max_xyz[1], max_xyz[2]], [max_xyz[0], min_xyz[1], min_xyz[2]]],
+                                      [[min_xyz[0], mid_xyz[1], mid_xyz[2]], [max_xyz[0], mid_xyz[1], mid_xyz[2]]]]
+
         # return positions
 
     def make_table(self, width, depth, height, name):
@@ -260,6 +289,7 @@ class GLViewer(VisualizationPlugin):
         table.geometry().set(tablegeom)
         table.appearance().setColor(160/256 ,180/256, 200/ 256, 1.0)
         # self.add('table_coord', table.getTransform())
+        self.collider =  collide.WorldCollider(self.world)
         return table
 
     def make_shelf(self, width, depth, height, name, wall_thickness=0.005):
@@ -293,6 +323,7 @@ class GLViewer(VisualizationPlugin):
         shelf = self.world.makeRigidObject(name)
         shelf.geometry().set(shelfgeom)
         shelf.appearance().setColor(0.2, 0.6, 0.3, 1.0)
+        self.collider = collide.WorldCollider(self.world)
         return shelf
 
     def solve_IK(self, init_config, is_left, is_vert):
@@ -336,16 +367,14 @@ class GLViewer(VisualizationPlugin):
                 pt1 = pos
                 pt2 = vectorops.add(so3.apply(ori, [1,0,0]), pt1)
                 pt3 = vectorops.add(so3.apply(ori, [0,1,0]), pt1)
-
+                # collider = collide.WorldCollider(self.world)
                 goal = ik.objective(link, local=[local1, local2, local3], world = [pt1, pt2, pt3])
                 if ik.solve(goal, activeDofs = activeDofs):
-                    # if self.robot.getConfig()[activeDofs[4]] < 0:
                     collisions = self.collider.robotSelfCollisions(self.robot)
-                    object_collisions = self.collider.robotObjectCollisions(self.robot)
-                    terrain_collisions = self.collider.robotTerrainCollisions(self.robot)
+                    # object_collisions = self.collider.robotObjectCollisions(self.robot)
+                    # terrain_collisions = self.collider.robotTerrainCollisions(self.robot)
 
-                    if len([c for c in collisions]) > 0 or len([o for o in object_collisions]) > 0 \
-                        or len([t for t in terrain_collisions]) > 0:
+                    if len([c for c in collisions]) > 0: #or len([o for o in object_collisions]) > 0 or len([t for t in terrain_collisions]) > 0:
                         per_pos_success.append(0)
                     else:
                         configurations.append(self.robot.getConfig())
@@ -390,6 +419,62 @@ class GLViewer(VisualizationPlugin):
         self.set_partial_config(init_config)
         return configurations, score, (volume_mean, volume_std)
 
+    def trajectory_score(self, is_vert, init_config, pose, vmax, vmin, is_vis = False, is_left=True):
+        #TODO: pick two points in the self.positions
+        # pos_arg = np.random.choice(len(self.positions), 3, replace=False)
+        # milestones = [self.positions[i] for i in range(len(pos_arg))]
+        self.grid_EE_position(pose, vmin, vmax)
+        trajectory_visualize = is_vis
+        score = []
+        for traj_idx, milestone in enumerate(self.trajectory_milestones):
+            traj = trajectory.Trajectory(milestones = milestone)
+            #Discretize the trajectory
+            discretized_pts = traj.discretize(0.01).milestones
+            # if trajectory_visualize:
+                # self.add("point", milestone[0])
+                # self.add('traj' + str(traj_idx), traj)
+                # self.hideLabel('traj' + str(traj_idx), traj)
+
+            result = []
+            new_init_config = None
+            for idx, pos in enumerate(discretized_pts):
+                if new_init_config is not None:
+                    self.set_partial_config(new_init_config)
+                    config = self.local_ik_solve(pos, is_vert, new_init_config)
+                else:
+                    self.set_partial_config(init_config)
+                    config = self.local_ik_solve(pos, is_vert, init_config)
+
+                if config is not None:
+                    result.append(True)
+                    new_init_config = config
+                    if trajectory_visualize:
+                        self.add(str(traj_idx)+str(idx), pos)
+                        self.setColor(str(traj_idx) + str(idx), 0, 0, 1)
+                        self.hideLabel(str(traj_idx) + str(idx), hidden=True)
+                    # print(result)
+                    # vis.run(self)
+                else:
+                    result.append(False)
+                    # print(result)
+                    if trajectory_visualize:
+                        self.add(str(traj_idx)+str(idx), pos)
+                        self.setColor(str(traj_idx)+str(idx), 1, 0, 0)
+                        self.hideLabel(str(traj_idx)+str(idx), hidden=True)
+
+                    # vis.run(self)
+            score.append(np.array(result).sum()/len(discretized_pts))
+        if trajectory_visualize:
+            vis.run(self)
+        return np.mean(score)
+
+
+
+        pdb.set_trace()
+        # retrun average_score
+
+
+
     def local_ik_solve(self, pos, is_vert, init_config, is_left=True):
         assert len(init_config) == 6
         success = False
@@ -417,12 +502,13 @@ class GLViewer(VisualizationPlugin):
         pt3 = vectorops.add(so3.apply(ori, [0, 1, 0]), pt1)
         goal = ik.objective(link, local=[local1, local2, local3], world=[pt1, pt2, pt3])
         if ik.solve(goal, activeDofs=activeDofs):
-            collisions = self.collider.robotSelfCollisions(self.robot)
-            object_collisions = self.collider.robotObjectCollisions(self.robot)
-            terrain_collisions = self.collider.robotTerrainCollisions(self.robot)
+            collisions = len([c for c in self.collider.robotSelfCollisions(self.robot)])
+            object_collisions = len([o for o in self.collider.robotObjectCollisions(self.robot)])
+            # terrain_collisions = len([t for t in self.collider.robotTerrainCollisions(self.robot)])
 
-            if len([c for c in collisions]) > 0 or len([o for o in object_collisions]) > 0 \
-                    or len([t for t in terrain_collisions]) > 0:
+            if collisions > 0 or object_collisions > 0:
+                    # or terrain_collisions > 0:
+                print(collisions, object_collisions) #terrain_collisions)
                 success = False
             else:
                 success = True
@@ -437,7 +523,7 @@ class GLViewer(VisualizationPlugin):
 
     def given_starting_config_score(self, init_config, pose, vmin, vmax, is_vertical, is_left, nrTrial = 20):
         self.grid_EE_position(pose, vmin, vmax)
-
+        self.trajectory_score(is_vertical, init_config, is_left)
         # if is_left:
         #     activeDOF_range = slice(self.left_active_dof[0], self.left_active_dof[-1] + 1)
         # else:
@@ -516,18 +602,19 @@ class GLViewer(VisualizationPlugin):
         self.add('world', self.world)
 
     def create_rigidObject(self, rigid_obj_name):
+        print(rigid_obj_name)
         R = so3.from_axis_angle(([0, 0, 1], -0.5 * math.pi))
-        if rigid_obj_name is 'low_shelf':
+        if rigid_obj_name == 'low_shelf':
             shelf = self.make_shelf(* self.shelf_dim, rigid_obj_name)
             shelf.setTransform(R, self.low_shelf_pos)
-        elif rigid_obj_name is 'high_shelf':
+        elif rigid_obj_name == 'high_shelf':
             shelf = self.make_shelf(* self.shelf_dim, rigid_obj_name)
             shelf.setTransform(R, self.high_shelf_pos)
-        elif rigid_obj_name is 'table':
+        elif rigid_obj_name == 'table':
             table = self.make_table(* self.table_dim, rigid_obj_name)
             table.setTransform(R, self.table_pos)
         self.add('world', self.world)
-
+        print(self.world.numRigidObjects())
         return
 
 if __name__ == '__main__':
