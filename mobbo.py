@@ -476,6 +476,12 @@ class MOBBO:
         res['pareto spread'] = [0]  #calculate here
         return res
 
+    def visualize(self, sampleIdx):
+        sample = self.samples[sampleIdx]
+        robotDesign = self.problem.designSpace.makeDesign(sample[0])
+        self.problem.behaviorSpace.visualize(design = robotDesign, behavior = sample[2],
+                                             envs=self.problem.environments)
+
     def plotSample(self,visualizer,sample,environment='median',metric='all'):
         #TODO: implement plotting samples
         """Given a DesignVisualizerBase, plots a sample in one or more

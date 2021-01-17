@@ -65,6 +65,7 @@ class RobotArmBehaviorSpace(BehaviorSpace):
 
     def evaluationData(self, design, environment, behavior, visualize=False):
         """
+        parameters: visualize=True used for debugging.
         return trajectory score
         """
         print(design.parameters, environment.name, behavior)
@@ -85,18 +86,18 @@ class RobotArmBehaviorSpace(BehaviorSpace):
         robotArmEnv = GLViewer(world, visualization=visualize)
         robotArmEnv.get_robot(*design.parameters)
         robotArmEnv.create_rigidObject(environment.name)
-        # #data for reachability metric
-        # sc, vol = robotArmEnv.given_starting_config_score(init_config=initConfig,
-        #                                                   pose=environment.pos,
-        #                                                   vmax=environment.posMax,
-        #                                                   vmin=environment.posMin,
-        #                                                   is_vertical=environment.isVert,
-        #                                                   is_left=True)
-
-        sc = robotArmEnv.trajectory_score(init_config=initConfig, pose=environment.pos,
-                                          vmax=environment.posMax, vmin=environment.posMin,
-                                          is_vert=environment.isVert, is_vis=visualize,
-                                          is_left=True)
+        #data for reachability metric
+        sc, vol = robotArmEnv.given_starting_config_score(init_config=initConfig,
+                                                          pose=environment.pos,
+                                                          vmax=environment.posMax,
+                                                          vmin=environment.posMin,
+                                                          is_vertical=environment.isVert,
+                                                          is_left=True)
+        print('score', sc)
+        # sc = robotArmEnv.trajectory_score(init_config=initConfig, pose=environment.pos,
+        #                                   vmax=environment.posMax, vmin=environment.posMin,
+        #                                   is_vert=environment.isVert, is_vis=visualize,
+        #                                   is_left=True)
         if visualize:
             vis.run(robotArmEnv)
         return sc
@@ -121,15 +122,21 @@ class RobotArmBehaviorSpace(BehaviorSpace):
                     initConfig.append(self.behaviorInit[c])
 
             robotArmEnv.create_rigidObject(environment.name)
-            sc = robotArmEnv.trajectory_score(init_config=initConfig, pose=environment.pos,
-                                              vmax=environment.posMax, vmin=environment.posMin,
-                                              is_vert=environment.isVert, is_vis=True,
-                                              is_left=True)
+            # sc = robotArmEnv.trajectory_score(init_config=initConfig, pose=environment.pos,
+            #                                   vmax=environment.posMax, vmin=environment.posMin,
+            #                                   is_vert=environment.isVert, is_vis=True,
+            #                                   is_left=True)
+            sc, vol = robotArmEnv.given_starting_config_score(init_config=initConfig,
+                                                              pose=environment.pos,
+                                                              vmax=environment.posMax,
+                                                              vmin=environment.posMin,
+                                                              is_vertical=environment.isVert,
+                                                              is_left=True)
             recomputedScore.append(sc)
-            # vis.run(robotArmEnv)
+            print(design.parameters, recomputedScore)
+            vis.run(robotArmEnv)
             robotArmEnv.remove_rigidObject()
             robotArmEnv.vis_reset()
-        print(design.parameters, recomputedScore)
 
 
     def validSamples(self, design, environment, behSampleSize, maxTrial):
@@ -146,12 +153,11 @@ class RobotArmBehaviorSpace(BehaviorSpace):
         while len(configs) < behSampleSize and trial < maxTrial:
             initConfig = self.randomSample().tolist()
             position = (np.array(environment.pos) + np.random.uniform(environment.posMin, environment.posMax)).tolist()
-            print(position)
             config = robotArmEnv.local_ik_solve(position, environment.isVert, initConfig)
             trial += 1
             if config is not None:
                 configs.append(config)
-                print('trial : ',trial)
+        print('total num of config:', len(configs))
         return configs
 
 class ReachabilityMetric(BehaviorMetric):
@@ -194,7 +200,7 @@ if __name__ == '__main__':
 
     settings = MOBBOSettings(numIter=args.numIter, numD=args.numD, numB=args.numB, kappa=args.kappa,
                              initializeMethod='valid', mc=args.numMCSamples,
-                             behOptimizationMethod='valid', parallel=args.parallel, numInitBeh=10, numInitDes=10)
+                             behOptimizationMethod='valid', parallel=args.parallel, numInitBeh=3, numInitDes=40)
 
     # Set Bounding boxes for each scenario
     pos = [[0.7, 0.3, 0.0], [0.9, 0.3, 0.2], [0.7, 0.3, 0.7], [0.7, 0.3, 0.7], [0.7, 0.3, 1.3]]

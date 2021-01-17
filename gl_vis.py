@@ -354,24 +354,22 @@ class GLViewer(VisualizationPlugin):
         for pos in self.positions:
             per_pos_success = []
             for ori in orientations:
-                # self.robot.setConfig(start_config)
                 self.set_partial_config(init_config)
 
-                # vis.run(self)
+                # vis.run(self) # for debugging initial configuration
                 local1 = [self.gripperDistance, 0,0]
                 local2 = vectorops.add(local1, [1,0,0])
                 local3 = vectorops.add(local1, [0,1,0])
                 pt1 = pos
                 pt2 = vectorops.add(so3.apply(ori, [1,0,0]), pt1)
                 pt3 = vectorops.add(so3.apply(ori, [0,1,0]), pt1)
-                # collider = collide.WorldCollider(self.world)
                 goal = ik.objective(link, local=[local1, local2, local3], world = [pt1, pt2, pt3])
                 if ik.solve(goal, activeDofs = activeDofs):
-                    collisions = self.collider.robotSelfCollisions(self.robot)
-                    # object_collisions = self.collider.robotObjectCollisions(self.robot)
-                    # terrain_collisions = self.collider.robotTerrainCollisions(self.robot)
+                    collisions = np.sum([c[0].getID() in idx_range or c[1].getID() in idx_range for c in self.collider.robotSelfCollisions(self.robot)])
+                    object_collisions = np.sum([o[0].getID() in idx_range for o in self.collider.robotObjectCollisions(self.robot)])
+                    terrain_collisions = np.sum([t[0].getID() in idx_range for t in self.collider.robotTerrainCollisions(self.robot)])
 
-                    if len([c for c in collisions]) > 0: #or len([o for o in object_collisions]) > 0 or len([t for t in terrain_collisions]) > 0:
+                    if collisions > 0 or object_collisions > 0 or terrain_collisions > 0:
                         per_pos_success.append(0)
                     else:
                         configurations.append(self.robot.getConfig())
@@ -383,6 +381,7 @@ class GLViewer(VisualizationPlugin):
                             Bs = np.vstack((Bs, b))
                         a = np.min(As, axis =0)
                         b = np.max(Bs, axis=0)
+
                         #final configuration's max bounding box
                         # if self.is_vis:
                         #     self.add(str(counter)+str(idx)+'a', a)
@@ -405,8 +404,7 @@ class GLViewer(VisualizationPlugin):
             counter += 1
             scores.append(sum(np.array(per_pos_success)>0)/len(per_pos_success))
         score = sum(scores) / len(scores)
-        print('score : ', score)
-            # self.robot.setConfig(new_q, is_left)
+
         if len(volumes) is 0:
             volume_mean = 0.5
             volume_std = 0.
@@ -449,8 +447,6 @@ class GLViewer(VisualizationPlugin):
                         self.add(str(traj_idx)+str(idx), pos)
                         self.setColor(str(traj_idx) + str(idx), 0, 0, 1)
                         self.hideLabel(str(traj_idx) + str(idx), hidden=True)
-                    # print(result)
-                    # vis.run(self)
                 else:
                     result.append(False)
                     # print(result)
@@ -478,10 +474,12 @@ class GLViewer(VisualizationPlugin):
             link = self.leftEELink
             activeDofs = self.left_active_dof
             activeDOF_range = slice(self.left_active_dof[0], self.left_active_dof[-1] + 1)
+            link_ids = self.left_arm_link_idx
         else:
             link = self.rightEELink
             activeDofs = self.right_active_dof
             activeDOF_range = slice(self.right_active_dof[0], self.right_active_dof[-1] + 1)
+            link_ids = self.right_arm_link_idx
 
         self.set_partial_config(init_config)
         # vis.run(self)
@@ -493,81 +491,30 @@ class GLViewer(VisualizationPlugin):
         pt3 = vectorops.add(so3.apply(ori, [0, 1, 0]), pt1)
         goal = ik.objective(link, local=[local1, local2, local3], world=[pt1, pt2, pt3])
         if ik.solve(goal, activeDofs=activeDofs):
-            collisions = len([c for c in self.collider.robotSelfCollisions(self.robot)])
-            object_collisions = len([o for o in self.collider.robotObjectCollisions(self.robot)])
-            # terrain_collisions = len([t for t in self.collider.robotTerrainCollisions(self.robot)])
+            collisions = np.sum([c[0].getID() in link_ids or c[1].getID() in link_ids for c in self.collider.robotSelfCollisions(self.robot)])
+            object_collisions = np.sum([o[0].getID() in link_ids for o in self.collider.robotObjectCollisions(self.robot)])
+            terrain_collisions = np.sum([t[0].getID() in link_ids for t in self.collider.robotTerrainCollisions(self.robot)])
 
-            if collisions > 0 or object_collisions > 0:
-                    # or terrain_collisions > 0:
-                print(collisions, object_collisions) #terrain_collisions)
+            if collisions > 0 or object_collisions > 0 or terrain_collisions > 0:
+                print('collision: ', collisions, object_collisions, terrain_collisions)
                 success = False
             else:
                 success = True
                 print('success')
-                print(pos)
         if success:
             return self.robot.getConfig()[activeDOF_range]
         else:
             return None
-
 
     def given_starting_config_score(self, init_config, pose, vmin, vmax, is_vertical, is_left, nrTrial = 20):
         self.grid_EE_position(pose, vmin, vmax)
         configs, score, volume = self.solve_IK(init_config, is_left, is_vertical)
         return score, 0.5-volume[0]
 
-
-    def IK_solve_starting_pose(self, starting_pose, is_vertical, is_left):
-        orientation = so3.identity()
-        if is_vertical:
-            orientation = self.vert_orientation[0]
-
-        if is_left:
-            link = self.leftEELink
-            activeDOF = self.left_active_dof
-            activeDOF_range = slice(self.left_active_dof[0], self.left_active_dof[-1] + 1)
-        else:
-            link = self.rightEELink
-            activeDOF = self.right_active_dof
-            activeDOF_range = slice(self.right_active_dof[0], self.right_active_dof[-1] + 1)
-
-        local1 = [self.gripperDistance, 0, 0]
-        local2 = vectorops.add(local1, [1, 0, 0])
-        local3 = vectorops.add(local1, [0, 1, 0])
-        pt1 = starting_pose
-        pt2 = vectorops.add(so3.apply(orientation, [1, 0, 0]), pt1)
-        pt3 = vectorops.add(so3.apply(orientation, [0, 1, 0]), pt1)
-
-        goal = ik.objective(link, local=[local1, local2, local3], world=[pt1, pt2, pt3])
-
-        if ik.solve_global(goal, activeDofs=activeDOF, numRestarts=1000):
-            collisions = self.collider.robotSelfCollisions(self.robot)
-            object_collisions = self.collider.robotObjectCollisions(self.robot)
-            terrain_collisions = self.collider.robotTerrainCollisions(self.robot)
-            if len([c for c in collisions]) > 0 or len([o for o in object_collisions]) > 0 \
-                    or len([t for t in terrain_collisions]) > 0:
-                success = False
-            else:
-                success = True
-        else:
-            success = False
-        return success, self.robot.getConfig()[activeDOF_range]
-
-
-    def current_collide_check(self, is_left= True):
-        collisions = self.collider.robotSelfCollisions(self.robot)
-        object_collisions = self.collider.robotObjectCollisions(self.robot)
-        terrain_collisions = self.collider.robotTerrainCollisions(self.robot)
-        if len([c for c in collisions]) > 0 or len([o for o in object_collisions]) > 0 \
-                or len([t for t in terrain_collisions]) > 0:
-            success = False
-        else:
-            success = True
-        return success
-
     def remove_rigidObject(self):
         if self.world.numRigidObjects() > 0:
             self.world.remove(self.world.rigidObject(0))
+        assert self.world.numRigidObjects() == 0
 
     def vis_reset(self):
         self.clear()
